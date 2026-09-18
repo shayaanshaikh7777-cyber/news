@@ -28,8 +28,8 @@ export function verifyToken(token: string): JWTPayload | null {
   }
 }
 
-export const MASTER_ADMIN_EMAIL = "admin@test.com";
-export const MASTER_ADMIN_PASS = "Aa@12345";
+export const MASTER_ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@test.com";
+export const MASTER_ADMIN_PASS = process.env.ADMIN_PASSWORD || "Aa@12345";
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
   try {

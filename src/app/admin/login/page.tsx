@@ -59,7 +59,7 @@ export default function AdminLoginPage() {
                   type="email"
                   name="email"
                   required
-                  defaultValue="admin@test.com"
+                  defaultValue={process.env.NODE_ENV !== "production" ? "admin@test.com" : ""}
                   placeholder="admin@test.com"
                   className="w-full border border-gray-300 rounded-lg py-2.5 pl-9 pr-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none font-semibold"
                 />
@@ -74,7 +74,7 @@ export default function AdminLoginPage() {
                   type="password"
                   name="password"
                   required
-                  defaultValue="Aa@12345"
+                  defaultValue={process.env.NODE_ENV !== "production" ? "Aa@12345" : ""}
                   placeholder="••••••••"
                   className="w-full border border-gray-300 rounded-lg py-2.5 pl-9 pr-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none font-semibold"
                 />
@@ -92,26 +92,28 @@ export default function AdminLoginPage() {
             </button>
           </form>
 
-          {/* Master Admin Credentials Box */}
-          <div className="mt-6 pt-5 border-t border-gray-200 text-xs text-gray-600 bg-gray-50 p-4 rounded-xl border border-gray-200">
-            <p className="font-bold text-gray-900 mb-2 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
-              <span>अधिकृत ॲडमीन लॉगिन क्रेडेंशियल्स:</span>
-            </p>
-            <div className="space-y-1.5 font-mono text-xs bg-white p-2.5 rounded-lg border border-gray-200">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500">ईमेल:</span>
-                <span className="font-bold text-red-900">admin@test.com</span>
+          {/* Master Admin Credentials Box (Development Only) */}
+          {process.env.NODE_ENV !== "production" && (
+            <div className="mt-6 pt-5 border-t border-gray-200 text-xs text-gray-600 bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <p className="font-bold text-gray-900 mb-2 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
+                <span>विकास मोड लॉगिन क्रेडेंशियल्स (Dev Credentials):</span>
+              </p>
+              <div className="space-y-1.5 font-mono text-xs bg-white p-2.5 rounded-lg border border-gray-200">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">ईमेल:</span>
+                  <span className="font-bold text-red-900">admin@test.com</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">पासवर्ड:</span>
+                  <span className="font-bold text-gray-900">Aa@12345</span>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500">पासवर्ड:</span>
-                <span className="font-bold text-gray-900">Aa@12345</span>
-              </div>
+              <p className="text-[11px] text-gray-500 mt-2">
+                टीप: उत्पादनात (Production) हे क्रेडेंशियल्स लपवले जातात व पर्यावरण व्हेरिएबल्सद्वारे (Environment Variables) सुरक्षित केले जातात.
+              </p>
             </div>
-            <p className="text-[11px] text-gray-500 mt-2">
-              टीप: वरील बटण दाबून आपण थेट संपूर्ण न्यूजरूम सीएमएस व सर्व अधिकारांसह प्रवेश करू शकता.
-            </p>
-          </div>
+          )}
         </div>
       </div>
     </div>
