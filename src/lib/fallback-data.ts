@@ -384,3 +384,4 @@ export const FALLBACK_ARTICLES: FallbackArticle[] = [
 ];
 
 export const FALLBACK_TRENDING = FALLBACK_ARTICLES.slice(0, 5);
+
