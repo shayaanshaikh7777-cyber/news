@@ -1,5 +1,5 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import Header from "@/components/public/Header";
 import Navbar from "@/components/public/Navbar";
 import BreakingTicker from "@/components/public/BreakingTicker";
@@ -29,7 +29,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   let article: any = null;
 
   try {
-    if (process.env.DATABASE_URL) {
+    const dbReady = await isDatabaseAvailable();
+    if (dbReady) {
       article = await prisma.article.findUnique({
         where: { slug },
         include: { category: true, reporter: true },
@@ -90,9 +91,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ArticlePage({ params }: Props) {
   const { slug } = await params;
 
+  const dbReady = await isDatabaseAvailable();
+
   // Check 301 Redirects first if DB available
   try {
-    if (process.env.DATABASE_URL) {
+    if (dbReady) {
       const redirectItem = await prisma.redirect.findUnique({
         where: { sourceSlug: slug },
       });
@@ -106,7 +109,7 @@ export default async function ArticlePage({ params }: Props) {
 
   let article: any = null;
   try {
-    if (process.env.DATABASE_URL) {
+    if (dbReady) {
       article = await prisma.article.findUnique({
         where: { slug },
         include: {
@@ -123,11 +126,8 @@ export default async function ArticlePage({ params }: Props) {
 
   // Graceful fallback to rich Jamkhed article dataset
   if (!article) {
-    article = FALLBACK_ARTICLES.find((a) => a.slug === slug) || null;
-  }
-
-  if (!article) {
-    notFound();
+    article =
+      FALLBACK_ARTICLES.find((a) => a.slug === slug) || FALLBACK_ARTICLES[0];
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://awaazjamkhed.com";
@@ -150,7 +150,7 @@ export default async function ArticlePage({ params }: Props) {
   // Related Articles (same category)
   let relatedArticles: any[] = [];
   try {
-    if (process.env.DATABASE_URL && article.categoryId) {
+    if (dbReady && article.categoryId) {
       relatedArticles = await prisma.article.findMany({
         where: {
           categoryId: article.categoryId,
@@ -171,23 +171,39 @@ export default async function ArticlePage({ params }: Props) {
   }
 
   // Location Articles (same village/taluka)
-  const locationArticles = article.locationId
-    ? await prisma.article.findMany({
-        where: {
-          locationId: article.locationId,
-          id: { not: article.id },
-          status: "PUBLISHED",
-        },
-        include: { category: true, location: true, reporter: true },
-        take: 3,
-      })
-    : [];
+  let locationArticles: any[] = [];
+  let breakingItems: any[] = [];
 
-  // Breaking News
-  const breakingItems = await prisma.breakingNews.findMany({
-    where: { isActive: true },
-    take: 3,
-  });
+  try {
+    if (dbReady) {
+      if (article.locationId) {
+        locationArticles = await prisma.article.findMany({
+          where: {
+            locationId: article.locationId,
+            id: { not: article.id },
+            status: "PUBLISHED",
+          },
+          include: { category: true, location: true, reporter: true },
+          take: 3,
+        });
+      }
+
+      breakingItems = await prisma.breakingNews.findMany({
+        where: { isActive: true },
+        take: 3,
+      });
+    }
+  } catch (err) {
+    console.warn("ArticlePage locationArticles/breakingItems DB query failed:", err);
+  }
+
+  if (locationArticles.length === 0) {
+    locationArticles = FALLBACK_ARTICLES.filter((a) => a.slug !== article.slug).slice(0, 3);
+  }
+  if (breakingItems.length === 0) {
+    const { FALLBACK_BREAKING } = await import("@/lib/fallback-data");
+    breakingItems = FALLBACK_BREAKING;
+  }
 
   const timePublished = article.publishedAt
     ? new Intl.DateTimeFormat("mr-IN", {

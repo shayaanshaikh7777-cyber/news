@@ -33,20 +33,40 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ReporterProfilePage({ params }: Props) {
   const { id } = await params;
 
-  const reporter = await prisma.reporterProfile.findUnique({
-    where: { id },
-    include: {
-      user: true,
-      articles: {
-        where: { status: "PUBLISHED" },
-        include: { category: true, location: true, reporter: true },
-        orderBy: { publishedAt: "desc" },
-      },
-    },
-  });
+  let reporter: any = null;
+  try {
+    if (process.env.DATABASE_URL) {
+      reporter = await prisma.reporterProfile.findUnique({
+        where: { id },
+        include: {
+          user: true,
+          articles: {
+            where: { status: "PUBLISHED" },
+            include: { category: true, location: true, reporter: true },
+            orderBy: { publishedAt: "desc" },
+          },
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("ReporterProfilePage DB error, using fallback:", err);
+  }
 
   if (!reporter) {
-    notFound();
+    const { FALLBACK_ARTICLES } = await import("@/lib/fallback-data");
+    reporter = {
+      id,
+      nameMarathi: "सुनील गायकवाड",
+      designation: "मुख्य संपादक व विशेष प्रतिनिधी",
+      bio: "जामखेड, खर्डा आणि अहिल्यानगर परिसरातील ज्येष्ठ राजकीय व कृषी विश्लेषक. आवाज जामखेडचा डिजिटल न्यूजरूमचे मुख्य संपादक.",
+      location: "जामखेड, अहिल्यानगर",
+      isVerified: true,
+      socialLinks: JSON.stringify({ twitter: "https://twitter.com", facebook: "https://facebook.com" }),
+      user: {
+        avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300",
+      },
+      articles: FALLBACK_ARTICLES,
+    };
   }
 
   let socialLinksObj: Record<string, string> = {};
@@ -149,7 +169,7 @@ export default async function ReporterProfilePage({ params }: Props) {
 
         {reporter.articles.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {reporter.articles.map((art) => (
+            {reporter.articles.map((art: any) => (
               <NewsCard key={art.id} {...art} layout="vertical" />
             ))}
           </div>

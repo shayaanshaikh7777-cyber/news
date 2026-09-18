@@ -1,5 +1,5 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import Header from "@/components/public/Header";
 import Navbar from "@/components/public/Navbar";
 import NewsCard from "@/components/public/NewsCard";
@@ -23,7 +23,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   let loc: any = null;
 
   try {
-    if (process.env.DATABASE_URL) {
+    const dbReady = await isDatabaseAvailable();
+    if (dbReady) {
       loc = await prisma.location.findUnique({
         where: { slug },
       });
@@ -33,10 +34,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   if (!loc) {
-    loc = FALLBACK_LOCATIONS.find((l) => l.slug === slug) || null;
+    loc = FALLBACK_LOCATIONS.find((l) => l.slug === slug) || FALLBACK_LOCATIONS[0];
   }
-
-  if (!loc) return { title: "गाव बातमीपत्र | आवाज जामखेडचा" };
 
   return {
     title: `${loc.village} गावच्या बातम्या | आवाज जामखेडचा`,
@@ -46,10 +45,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function LocationPage({ params }: Props) {
   const { slug } = await params;
+  const dbReady = await isDatabaseAvailable();
   let location: any = null;
 
   try {
-    if (process.env.DATABASE_URL) {
+    if (dbReady) {
       location = await prisma.location.findUnique({
         where: { slug },
       });
@@ -59,16 +59,13 @@ export default async function LocationPage({ params }: Props) {
   }
 
   if (!location) {
-    location = FALLBACK_LOCATIONS.find((l) => l.slug === slug) || null;
-  }
-
-  if (!location) {
-    notFound();
+    location =
+      FALLBACK_LOCATIONS.find((l) => l.slug === slug) || FALLBACK_LOCATIONS[0];
   }
 
   let articles: any[] = [];
   try {
-    if (process.env.DATABASE_URL && location.id) {
+    if (dbReady && location.id) {
       articles = await prisma.article.findMany({
         where: {
           locationId: location.id,
@@ -95,7 +92,7 @@ export default async function LocationPage({ params }: Props) {
 
   let otherVillages: any[] = [];
   try {
-    if (process.env.DATABASE_URL && location.id) {
+    if (dbReady && location.id) {
       otherVillages = await prisma.location.findMany({
         where: {
           id: { not: location.id },

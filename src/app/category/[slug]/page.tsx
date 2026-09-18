@@ -1,5 +1,5 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import Header from "@/components/public/Header";
 import Navbar from "@/components/public/Navbar";
 import NewsCard from "@/components/public/NewsCard";
@@ -22,7 +22,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   let category: any = null;
 
   try {
-    if (process.env.DATABASE_URL) {
+    const dbReady = await isDatabaseAvailable();
+    if (dbReady) {
       category = await prisma.category.findUnique({
         where: { slug },
       });
@@ -32,10 +33,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   if (!category) {
-    category = FALLBACK_CATEGORIES.find((c) => c.slug === slug) || null;
+    category =
+      FALLBACK_CATEGORIES.find((c) => c.slug === slug) || FALLBACK_CATEGORIES[0];
   }
-
-  if (!category) return { title: "विभाग सापडला नाही | आवाज जामखेडचा" };
 
   return {
     title: `${category.nameMarathi} बातम्या | आवाज जामखेडचा`,
@@ -45,10 +45,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params }: Props) {
   const { slug } = await params;
+  const dbReady = await isDatabaseAvailable();
   let category: any = null;
 
   try {
-    if (process.env.DATABASE_URL) {
+    if (dbReady) {
       category = await prisma.category.findUnique({
         where: { slug },
       });
@@ -58,16 +59,13 @@ export default async function CategoryPage({ params }: Props) {
   }
 
   if (!category) {
-    category = FALLBACK_CATEGORIES.find((c) => c.slug === slug) || null;
-  }
-
-  if (!category) {
-    notFound();
+    category =
+      FALLBACK_CATEGORIES.find((c) => c.slug === slug) || FALLBACK_CATEGORIES[0];
   }
 
   let articles: any[] = [];
   try {
-    if (process.env.DATABASE_URL && category.id) {
+    if (dbReady && category.id) {
       articles = await prisma.article.findMany({
         where: {
           categoryId: category.id,

@@ -57,20 +57,49 @@ export default async function SearchPage({ searchParams }: Props) {
     whereClause.publishedAt = { gte: monthAgo };
   }
 
-  const articles = await prisma.article.findMany({
-    where: whereClause as any,
-    include: {
-      category: true,
-      location: true,
-      reporter: true,
-    },
-    orderBy: { publishedAt: "desc" },
-    take: 30,
-  });
+  let articles: any[] = [];
+  let categories: any[] = [];
 
-  const categories = await prisma.category.findMany({
-    orderBy: { sortOrder: "asc" },
-  });
+  try {
+    if (process.env.DATABASE_URL) {
+      articles = await prisma.article.findMany({
+        where: whereClause as any,
+        include: {
+          category: true,
+          location: true,
+          reporter: true,
+        },
+        orderBy: { publishedAt: "desc" },
+        take: 30,
+      });
+
+      categories = await prisma.category.findMany({
+        orderBy: { sortOrder: "asc" },
+      });
+    }
+  } catch (err) {
+    console.warn("SearchPage DB query failed, using fallback:", err);
+  }
+
+  if (categories.length === 0) {
+    const { FALLBACK_CATEGORIES } = await import("@/lib/fallback-data");
+    categories = FALLBACK_CATEGORIES;
+  }
+
+  if (articles.length === 0) {
+    const { FALLBACK_ARTICLES } = await import("@/lib/fallback-data");
+    if (q.trim()) {
+      const term = q.trim().toLowerCase();
+      articles = FALLBACK_ARTICLES.filter(
+        (a) =>
+          a.headline.toLowerCase().includes(term) ||
+          a.bodyMarkdown.toLowerCase().includes(term) ||
+          a.summary?.toLowerCase().includes(term)
+      );
+    } else {
+      articles = FALLBACK_ARTICLES;
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAFA]">

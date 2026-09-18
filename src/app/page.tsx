@@ -1,5 +1,5 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import Header from "@/components/public/Header";
 import Navbar from "@/components/public/Navbar";
 import BreakingTicker from "@/components/public/BreakingTicker";
@@ -32,7 +32,8 @@ export default async function HomePage() {
   let locations: any[] = [];
 
   try {
-    if (process.env.DATABASE_URL) {
+    const dbReady = await isDatabaseAvailable();
+    if (dbReady) {
       // 1. Breaking News
       breakingItems = await prisma.breakingNews.findMany({
         where: { isActive: true },
@@ -111,12 +112,24 @@ export default async function HomePage() {
 
       <main className="flex-1">
         {/* Hero Section: Grand Lead Story + Side News + Trending */}
-        {leadArticle && (
+        {leadArticle ? (
           <HeroSection
             leadArticle={leadArticle}
             sideArticles={sideArticles}
             trendingList={trendingList as any}
           />
+        ) : (
+          <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+            <div className="bg-white rounded-2xl p-10 border border-gray-200 shadow-sm max-w-lg mx-auto">
+              <Newspaper className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 font-bold text-lg">
+                सध्या कोणतीही बातमी उपलब्ध नाही.
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                लवकरच ताज्या बातम्या अपडेट केल्या जातील.
+              </p>
+            </div>
+          </div>
         )}
 
         {/* Hyper-Local Village News Hub Banner */}
