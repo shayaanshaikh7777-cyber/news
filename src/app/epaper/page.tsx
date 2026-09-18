@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   description: "आवाज जामखेडचा अधिकृत डिजिटल ई-पेपर आणि सोशल मीडिया वृत्तपत्र कात्रणे (Clippings).",
 };
 
+import { FALLBACK_ARTICLES } from "@/lib/fallback-data";
+
 export const dynamic = "force-dynamic";
 
 export default async function EPaperPage() {
@@ -28,6 +30,10 @@ export default async function EPaperPage() {
     }
   } catch (err) {
     console.warn("EPaper: Database query failed, using empty list.", err);
+  }
+
+  if (articles.length === 0) {
+    articles = FALLBACK_ARTICLES;
   }
 
   const currentDate = new Intl.DateTimeFormat("mr-IN", {

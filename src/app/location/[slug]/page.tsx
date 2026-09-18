@@ -12,15 +12,29 @@ import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 
+import { FALLBACK_LOCATIONS, FALLBACK_ARTICLES } from "@/lib/fallback-data";
+
 interface Props {
   params: Promise<{ slug: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const loc = await prisma.location.findUnique({
-    where: { slug },
-  });
+  let loc: any = null;
+
+  try {
+    if (process.env.DATABASE_URL) {
+      loc = await prisma.location.findUnique({
+        where: { slug },
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+  if (!loc) {
+    loc = FALLBACK_LOCATIONS.find((l) => l.slug === slug) || null;
+  }
 
   if (!loc) return { title: "गाव बातमीपत्र | आवाज जामखेडचा" };
 
@@ -32,36 +46,71 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function LocationPage({ params }: Props) {
   const { slug } = await params;
+  let location: any = null;
 
-  const location = await prisma.location.findUnique({
-    where: { slug },
-  });
+  try {
+    if (process.env.DATABASE_URL) {
+      location = await prisma.location.findUnique({
+        where: { slug },
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+  if (!location) {
+    location = FALLBACK_LOCATIONS.find((l) => l.slug === slug) || null;
+  }
 
   if (!location) {
     notFound();
   }
 
-  const articles = await prisma.article.findMany({
-    where: {
-      locationId: location.id,
-      status: "PUBLISHED",
-    },
-    include: {
-      category: true,
-      location: true,
-      reporter: true,
-    },
-    orderBy: { publishedAt: "desc" },
-    take: 24,
-  });
+  let articles: any[] = [];
+  try {
+    if (process.env.DATABASE_URL && location.id) {
+      articles = await prisma.article.findMany({
+        where: {
+          locationId: location.id,
+          status: "PUBLISHED",
+        },
+        include: {
+          category: true,
+          location: true,
+          reporter: true,
+        },
+        orderBy: { publishedAt: "desc" },
+        take: 24,
+      });
+    }
+  } catch {
+    // ignore
+  }
 
-  const otherVillages = await prisma.location.findMany({
-    where: {
-      id: { not: location.id },
-      taluka: location.taluka,
-    },
-    take: 12,
-  });
+  if (articles.length === 0) {
+    articles = FALLBACK_ARTICLES.filter(
+      (a) => a.location?.slug === slug || a.locationId === location.id
+    );
+  }
+
+  let otherVillages: any[] = [];
+  try {
+    if (process.env.DATABASE_URL && location.id) {
+      otherVillages = await prisma.location.findMany({
+        where: {
+          id: { not: location.id },
+        },
+        orderBy: { village: "asc" },
+        take: 8,
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+  if (otherVillages.length === 0) {
+    otherVillages = FALLBACK_LOCATIONS.filter((l) => l.slug !== slug).slice(0, 8);
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAFA]">

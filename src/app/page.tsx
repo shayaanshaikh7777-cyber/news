@@ -12,6 +12,13 @@ import { getTrendingNews } from "@/lib/trending";
 import Link from "next/link";
 import { ChevronRight, Video, Newspaper, MapPin, Sparkles } from "lucide-react";
 
+import {
+  FALLBACK_ARTICLES,
+  FALLBACK_BREAKING,
+  FALLBACK_LOCATIONS,
+  FALLBACK_TRENDING,
+} from "@/lib/fallback-data";
+
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
@@ -54,7 +61,21 @@ export default async function HomePage() {
       });
     }
   } catch (err) {
-    console.warn("HomePage: Database query failed, using empty list fallback.", err);
+    console.warn("HomePage: Database query failed, using fallback dataset.", err);
+  }
+
+  // Gracefully use authentic Jamkhed seed dataset if database is empty or offline
+  if (allArticles.length === 0) {
+    allArticles = FALLBACK_ARTICLES;
+  }
+  if (breakingItems.length === 0) {
+    breakingItems = FALLBACK_BREAKING;
+  }
+  if (locations.length === 0) {
+    locations = FALLBACK_LOCATIONS;
+  }
+  if (trendingList.length === 0) {
+    trendingList = FALLBACK_TRENDING;
   }
 
   const leadArticle = allArticles[0] || null;

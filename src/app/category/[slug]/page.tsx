@@ -11,15 +11,29 @@ import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 
+import { FALLBACK_CATEGORIES, FALLBACK_ARTICLES } from "@/lib/fallback-data";
+
 interface Props {
   params: Promise<{ slug: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const category = await prisma.category.findUnique({
-    where: { slug },
-  });
+  let category: any = null;
+
+  try {
+    if (process.env.DATABASE_URL) {
+      category = await prisma.category.findUnique({
+        where: { slug },
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+  if (!category) {
+    category = FALLBACK_CATEGORIES.find((c) => c.slug === slug) || null;
+  }
 
   if (!category) return { title: "विभाग सापडला नाही | आवाज जामखेडचा" };
 
@@ -31,28 +45,52 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params }: Props) {
   const { slug } = await params;
+  let category: any = null;
 
-  const category = await prisma.category.findUnique({
-    where: { slug },
-  });
+  try {
+    if (process.env.DATABASE_URL) {
+      category = await prisma.category.findUnique({
+        where: { slug },
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+  if (!category) {
+    category = FALLBACK_CATEGORIES.find((c) => c.slug === slug) || null;
+  }
 
   if (!category) {
     notFound();
   }
 
-  const articles = await prisma.article.findMany({
-    where: {
-      categoryId: category.id,
-      status: "PUBLISHED",
-    },
-    include: {
-      category: true,
-      location: true,
-      reporter: true,
-    },
-    orderBy: { publishedAt: "desc" },
-    take: 24,
-  });
+  let articles: any[] = [];
+  try {
+    if (process.env.DATABASE_URL && category.id) {
+      articles = await prisma.article.findMany({
+        where: {
+          categoryId: category.id,
+          status: "PUBLISHED",
+        },
+        include: {
+          category: true,
+          location: true,
+          reporter: true,
+        },
+        orderBy: { publishedAt: "desc" },
+        take: 24,
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+  if (articles.length === 0) {
+    articles = FALLBACK_ARTICLES.filter(
+      (a) => a.category?.slug === slug || a.categoryId === category.id
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAFA]">

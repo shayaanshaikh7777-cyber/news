@@ -12,12 +12,20 @@ export const metadata: Metadata = {
   description: "जामखेड, अहिल्यानगर व महाराष्ट्रातील सर्वाधिक वाचलेल्या व चर्चिलेल्या बातम्या.",
 };
 
+import { FALLBACK_ARTICLES } from "@/lib/fallback-data";
+
 export const dynamic = "force-dynamic";
 
 export default async function TrendingPage() {
-  const trendingNow = await getTrendingNews(6);
-  const mostReadToday = await getMostReadToday(6);
-  const popularInJamkhed = await getPopularInJamkhed(6);
+  let trendingNow = await getTrendingNews(6);
+  let mostReadToday = await getMostReadToday(6);
+  let popularInJamkhed = await getPopularInJamkhed(6);
+
+  if (trendingNow.length === 0) trendingNow = FALLBACK_ARTICLES.slice(0, 6) as any;
+  if (mostReadToday.length === 0) mostReadToday = FALLBACK_ARTICLES.slice(0, 6) as any;
+  if (popularInJamkhed.length === 0) {
+    popularInJamkhed = (FALLBACK_ARTICLES.filter((a) => a.location?.taluka === "जामखेड").slice(0, 6) || FALLBACK_ARTICLES.slice(0, 6)) as any;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAFA]">
