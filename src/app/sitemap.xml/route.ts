@@ -1,23 +1,35 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://awaazjamkhed.com";
 
-  const articles = await prisma.article.findMany({
-    where: { status: "PUBLISHED" },
-    select: { slug: true, updatedAt: true, publishedAt: true },
-    orderBy: { publishedAt: "desc" },
-    take: 1000,
-  });
+  let articles: Array<{ slug: string; updatedAt: Date }> = [];
+  let categories: Array<{ slug: string; updatedAt: Date }> = [];
+  let locations: Array<{ slug: string; updatedAt: Date }> = [];
 
-  const categories = await prisma.category.findMany({
-    select: { slug: true, updatedAt: true },
-  });
+  try {
+    if (process.env.DATABASE_URL) {
+      articles = await prisma.article.findMany({
+        where: { status: "PUBLISHED" },
+        select: { slug: true, updatedAt: true, publishedAt: true },
+        orderBy: { publishedAt: "desc" },
+        take: 1000,
+      });
 
-  const locations = await prisma.location.findMany({
-    select: { slug: true, updatedAt: true },
-  });
+      categories = await prisma.category.findMany({
+        select: { slug: true, updatedAt: true },
+      });
+
+      locations = await prisma.location.findMany({
+        select: { slug: true, updatedAt: true },
+      });
+    }
+  } catch (err) {
+    console.warn("Sitemap: Database not available during request, returning core pages.", err);
+  }
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

@@ -17,7 +17,7 @@ import Link from "next/link";
 import { Clock, MapPin, User, Calendar, CheckCircle2, Share2, ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ slug: string }>;

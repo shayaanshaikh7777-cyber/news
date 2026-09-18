@@ -10,7 +10,7 @@ import Link from "next/link";
 import { User, MapPin, CheckCircle, Newspaper, Globe } from "lucide-react";
 import type { Metadata } from "next";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ id: string }>;

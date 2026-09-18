@@ -12,35 +12,50 @@ import { getTrendingNews } from "@/lib/trending";
 import Link from "next/link";
 import { ChevronRight, Video, Newspaper, MapPin, Sparkles } from "lucide-react";
 
-export const revalidate = 60; // ISR 60s cache
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  // 1. Breaking News
-  const breakingItems = await prisma.breakingNews.findMany({
-    where: { isActive: true },
-    orderBy: { priority: "desc" },
-    take: 5,
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let breakingItems: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let allArticles: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let trendingList: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let locations: any[] = [];
 
-  // 2. Published Articles
-  const allArticles = await prisma.article.findMany({
-    where: { status: "PUBLISHED" },
-    include: {
-      category: true,
-      location: true,
-      reporter: true,
-    },
-    orderBy: { publishedAt: "desc" },
-    take: 20,
-  });
+  try {
+    if (process.env.DATABASE_URL) {
+      // 1. Breaking News
+      breakingItems = await prisma.breakingNews.findMany({
+        where: { isActive: true },
+        orderBy: { priority: "desc" },
+        take: 5,
+      });
 
-  // 3. Trending Articles
-  const trendingList = await getTrendingNews(5);
+      // 2. Published Articles
+      allArticles = await prisma.article.findMany({
+        where: { status: "PUBLISHED" },
+        include: {
+          category: true,
+          location: true,
+          reporter: true,
+        },
+        orderBy: { publishedAt: "desc" },
+        take: 20,
+      });
 
-  // 4. Locations for Village picker
-  const locations = await prisma.location.findMany({
-    orderBy: { village: "asc" },
-  });
+      // 3. Trending Articles
+      trendingList = await getTrendingNews(5);
+
+      // 4. Locations for Village picker
+      locations = await prisma.location.findMany({
+        orderBy: { village: "asc" },
+      });
+    }
+  } catch (err) {
+    console.warn("HomePage: Database query failed, using empty list fallback.", err);
+  }
 
   const leadArticle = allArticles[0] || null;
   const sideArticles = allArticles.slice(1, 4);

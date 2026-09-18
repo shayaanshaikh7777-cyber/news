@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   description: "जामखेड, अहिल्यानगर व महाराष्ट्रातील सर्वाधिक वाचलेल्या व चर्चिलेल्या बातम्या.",
 };
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export default async function TrendingPage() {
   const trendingNow = await getTrendingNews(6);

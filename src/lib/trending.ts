@@ -56,56 +56,71 @@ export function calculateTrendingScore(
 }
 
 export async function getTrendingNews(limit = 5) {
-  const weights = await getTrendingWeights();
+  try {
+    const weights = await getTrendingWeights();
 
-  const articles = await prisma.article.findMany({
-    where: {
-      status: "PUBLISHED",
-    },
-    include: {
-      category: true,
-      location: true,
-      reporter: true,
-    },
-    orderBy: { publishedAt: "desc" },
-    take: 30,
-  });
+    const articles = await prisma.article.findMany({
+      where: {
+        status: "PUBLISHED",
+      },
+      include: {
+        category: true,
+        location: true,
+        reporter: true,
+      },
+      orderBy: { publishedAt: "desc" },
+      take: 30,
+    });
 
-  const scored = articles.map((art) => ({
-    ...art,
-    score: calculateTrendingScore(art, weights),
-  }));
+    const scored = articles.map((art) => ({
+      ...art,
+      score: calculateTrendingScore(art, weights),
+    }));
 
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit);
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit);
+  } catch (err) {
+    console.warn("Trending: Database query failed, returning empty list.", err);
+    return [];
+  }
 }
 
 export async function getMostReadToday(limit = 5) {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
 
-  return await prisma.article.findMany({
-    where: {
-      status: "PUBLISHED",
-      publishedAt: { gte: startOfDay },
-    },
-    include: { category: true, location: true, reporter: true },
-    orderBy: { viewCount: "desc" },
-    take: limit,
-  });
+    return await prisma.article.findMany({
+      where: {
+        status: "PUBLISHED",
+        publishedAt: { gte: startOfDay },
+      },
+      include: { category: true, location: true, reporter: true },
+      orderBy: { viewCount: "desc" },
+      take: limit,
+    });
+  } catch (err) {
+    console.warn("MostRead: Database query failed, returning empty list.", err);
+    return [];
+  }
 }
 
 export async function getPopularInJamkhed(limit = 5) {
-  return await prisma.article.findMany({
-    where: {
-      status: "PUBLISHED",
-      location: {
-        taluka: "जामखेड",
+  try {
+    return await prisma.article.findMany({
+      where: {
+        status: "PUBLISHED",
+        location: {
+          taluka: "जामखेड",
+        },
       },
-    },
-    include: { category: true, location: true, reporter: true },
-    orderBy: { viewCount: "desc" },
-    take: limit,
-  });
+      include: { category: true, location: true, reporter: true },
+      orderBy: { viewCount: "desc" },
+      take: limit,
+    });
+  } catch (err) {
+    console.warn("PopularInJamkhed: Database query failed, returning empty list.", err);
+    return [];
+  }
 }
 

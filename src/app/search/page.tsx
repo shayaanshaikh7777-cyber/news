@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   description: "जामखेड, तालुका व जिल्हा पातळीवरील बातम्या, शेती आणि स्थानिक घडामोडींचा शोध घ्या.",
 };
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   searchParams: Promise<{
     q?: string;

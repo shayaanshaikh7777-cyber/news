@@ -12,15 +12,23 @@ export const metadata: Metadata = {
   description: "आवाज जामखेडचा अधिकृत डिजिटल ई-पेपर आणि सोशल मीडिया वृत्तपत्र कात्रणे (Clippings).",
 };
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export default async function EPaperPage() {
-  const articles = await prisma.article.findMany({
-    where: { status: "PUBLISHED" },
-    include: { category: true, location: true, reporter: true },
-    orderBy: { publishedAt: "desc" },
-    take: 12,
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let articles: any[] = [];
+  try {
+    if (process.env.DATABASE_URL) {
+      articles = await prisma.article.findMany({
+        where: { status: "PUBLISHED" },
+        include: { category: true, location: true, reporter: true },
+        orderBy: { publishedAt: "desc" },
+        take: 12,
+      });
+    }
+  } catch (err) {
+    console.warn("EPaper: Database query failed, using empty list.", err);
+  }
 
   const currentDate = new Intl.DateTimeFormat("mr-IN", {
     weekday: "long",

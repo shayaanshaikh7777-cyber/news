@@ -1,21 +1,31 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://awaazjamkhed.com";
 
   // Google News sitemap includes articles published in the last 48 hours
   const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-  const articles = await prisma.article.findMany({
-    where: {
-      status: "PUBLISHED",
-      publishedAt: { gte: twoDaysAgo },
-    },
-    include: { category: true },
-    orderBy: { publishedAt: "desc" },
-    take: 250,
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let articles: any[] = [];
+  try {
+    if (process.env.DATABASE_URL) {
+      articles = await prisma.article.findMany({
+        where: {
+          status: "PUBLISHED",
+          publishedAt: { gte: twoDaysAgo },
+        },
+        include: { category: true },
+        orderBy: { publishedAt: "desc" },
+        take: 250,
+      });
+    }
+  } catch (err) {
+    console.warn("News Sitemap: Database not available during request, returning empty list.", err);
+  }
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
