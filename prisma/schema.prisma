@@ -1,0 +1,315 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String           @id @default(cuid())
+  name         String
+  email        String           @unique
+  passwordHash String
+  role         String           @default("VIEWER") // SUPER_ADMIN, EDITOR, REPORTER, VIEWER
+  avatar       String?
+  status       String           @default("ACTIVE")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  reporterProfile   ReporterProfile?
+  articlesCreated   Article[]       @relation("CreatedBy")
+  articlesSubmitted Article[]       @relation("SubmittedBy")
+  articlesReviewed  Article[]       @relation("ReviewedBy")
+  articlesApproved  Article[]       @relation("ApprovedBy")
+  articlesPublished Article[]       @relation("PublishedBy")
+  revisions         ArticleRevision[]
+  auditLogs         AuditLog[]
+
+  @@index([role])
+  @@index([email])
+}
+
+model ReporterProfile {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nameMarathi  String
+  designation  String
+  bio          String?
+  location     String?
+  socialLinks  String?   // JSON object with links
+  isVerified   Boolean   @default(true)
+  articleCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  articles     Article[]
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  nameMarathi String
+  slug        String    @unique
+  description String?
+  color       String    @default("#991B1B")
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  articles    Article[]
+
+  @@index([slug])
+}
+
+model Location {
+  id         String    @id @default(cuid())
+  district   String    // Ahilyanagar
+  taluka     String    // Jamkhed, Karjat, Ashti, etc.
+  village    String    // Village name
+  slug       String    @unique
+  isHotspot  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  articles   Article[]
+
+  @@index([slug])
+  @@index([taluka])
+  @@index([village])
+}
+
+model Article {
+  id                 String             @id @default(cuid())
+  headline           String
+  subheadline        String?
+  summary            String?
+  bodyMarkdown       String
+  featuredImage      String?
+  gallery            String?            // JSON array of images
+  youtubeUrl         String?
+  categoryId         String
+  category           Category           @relation(fields: [categoryId], references: [id])
+  locationId         String?
+  location           Location?          @relation(fields: [locationId], references: [id])
+  reporterId         String?
+  reporter           ReporterProfile?   @relation(fields: [reporterId], references: [id])
+  source             String?
+  priority           Int                @default(0)
+  isBreaking         Boolean            @default(false)
+  status             String             @default("DRAFT") // DRAFT, AI_ASSISTED, SUBMITTED, UNDER_REVIEW, REVISION_REQUESTED, APPROVED, SCHEDULED, PUBLISHED, UPDATED, ARCHIVED, REJECTED
+  
+  createdById        String?
+  createdBy          User?              @relation("CreatedBy", fields: [createdById], references: [id])
+  submittedById      String?
+  submittedBy        User?              @relation("SubmittedBy", fields: [submittedById], references: [id])
+  reviewedById       String?
+  reviewedBy         User?              @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  approvedById       String?
+  approvedBy         User?              @relation("ApprovedBy", fields: [approvedById], references: [id])
+  publishedById      String?
+  publishedBy        User?              @relation("PublishedBy", fields: [publishedById], references: [id])
+
+  publishedAt        DateTime?
+  scheduledAt        DateTime?
+  seoTitle           String?
+  seoDescription     String?
+  seoKeywords        String?
+  slug               String             @unique
+  viewCount          Int                @default(0)
+  uniqueVisitors     Int                @default(0)
+  readingTimeMinutes Int                @default(2)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  revisions          ArticleRevision[]
+  liveUpdates        LiveUpdate[]
+  clippings          Clipping[]
+  views              ArticleView[]
+
+  @@index([slug])
+  @@index([status])
+  @@index([publishedAt])
+  @@index([categoryId])
+  @@index([locationId])
+  @@index([reporterId])
+}
+
+model ArticleRevision {
+  id            String    @id @default(cuid())
+  articleId     String
+  article       Article   @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  changedById   String
+  changedBy     User      @relation(fields: [changedById], references: [id])
+  changeSummary String
+  diffData      String    // JSON snapshot/diff
+  createdAt     DateTime  @default(now())
+
+  @@index([articleId])
+  @@index([createdAt])
+}
+
+model LiveUpdate {
+  id         String    @id @default(cuid())
+  articleId  String
+  article    Article   @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  timestamp  DateTime  @default(now())
+  authorName String
+  content    String
+  editedAt   DateTime?
+
+  @@index([articleId])
+  @@index([timestamp])
+}
+
+model BreakingNews {
+  id        String    @id @default(cuid())
+  title     String
+  linkUrl   String?
+  imageUrl  String?
+  priority  Int       @default(1)
+  isActive  Boolean   @default(true)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([isActive])
+}
+
+model Advertisement {
+  id              String         @id @default(cuid())
+  advertiser      String
+  bannerUrl       String
+  destinationUrl  String
+  placement       String         // HEADER, TOP_BANNER, SIDEBAR, ARTICLE_TOP, ARTICLE_MIDDLE, ARTICLE_BOTTOM, FOOTER, MOBILE_STICKY
+  weight          Int            @default(1)
+  priority        Int            @default(1)
+  startDate       DateTime?
+  endDate         DateTime?
+  device          String?        @default("ALL")
+  category        String?
+  location        String?
+  isActive        Boolean        @default(true)
+  impressions     Int            @default(0)
+  clicks          Int            @default(0)
+  campaignRevenue Float          @default(0.0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  adImpressions   AdImpression[]
+  adClicks        AdClick[]
+
+  @@index([placement])
+  @@index([isActive])
+}
+
+model AdImpression {
+  id          String        @id @default(cuid())
+  adId        String
+  ad          Advertisement @relation(fields: [adId], references: [id], onDelete: Cascade)
+  visitorHash String
+  createdAt   DateTime      @default(now())
+
+  @@index([adId])
+  @@index([createdAt])
+}
+
+model AdClick {
+  id          String        @id @default(cuid())
+  adId        String
+  ad          Advertisement @relation(fields: [adId], references: [id], onDelete: Cascade)
+  visitorHash String
+  createdAt   DateTime      @default(now())
+
+  @@index([adId])
+}
+
+model ArticleView {
+  id              String   @id @default(cuid())
+  articleId       String
+  article         Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  visitorHash     String
+  referrer        String?
+  device          String?
+  durationSeconds Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([articleId])
+  @@index([createdAt])
+}
+
+model WhatsAppSubscriber {
+  id                  String   @id @default(cuid())
+  name                String
+  phone               String   @unique
+  location            String?
+  preferredCategories String?  // JSON array
+  consent             Boolean  @default(true)
+  status              String   @default("ACTIVE") // ACTIVE, UNSUBSCRIBED
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([phone])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+model Clipping {
+  id            String   @id @default(cuid())
+  articleId     String
+  article       Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  format        String   // EPAPER, STORY_1080X1920, PORTRAIT_1080X1350, SQUARE_1080X1080, FACEBOOK, WHATSAPP
+  imageUrl      String
+  downloadCount Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@index([articleId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  details   String?  // JSON string
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([entity])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Redirect {
+  id              String   @id @default(cuid())
+  sourceSlug      String   @unique
+  destinationSlug String
+  statusCode      Int      @default(301)
+  createdAt       DateTime @default(now())
+
+  @@index([sourceSlug])
+}
+
+model SiteSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+}
+

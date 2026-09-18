@@ -1,0 +1,43 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Testing
+/coverage
+
+# Next.js build output
+/.next/
+/out/
+
+# Production
+/build
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment variables
+.env
+.env*.local
+!.env.example
+
+# Database
+*.db
+*.db-journal
+/prisma/*.db
+/prisma/*.db-journal
+
+# Uploaded & generated media
+/public/clippings/*
+!/public/clippings/.gitkeep
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# Operating System Files
+.DS_Store
+*.pem
+Thumbs.db
