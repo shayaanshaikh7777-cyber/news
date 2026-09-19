@@ -50,6 +50,7 @@ export async function GET() {
         database_scheme: safeInfo.scheme,
         is_pooler: safeInfo.isPooler,
         has_pgbouncer: safeInfo.hasPgBouncer,
+        username_type: safeInfo.usernameType,
       },
       {
         status: 200,
@@ -63,12 +64,23 @@ export async function GET() {
     // Clean any sensitive string that might look like a password
     const sanitizedMsg = rawMsg.replace(/:[^:@]+@/, ":••••••••@");
 
+    let diagnosticHint: string | undefined;
+    if (safeInfo.isMissingProjectRefUser) {
+      diagnosticHint =
+        "Supabase Transaction Pooler (port 6543) requires the username to include the project ref: postgres.[project-ref]. Using 'postgres' alone causes 'Authentication failed'.";
+    } else if (sanitizedMsg.includes("Authentication failed")) {
+      diagnosticHint =
+        "Authentication failed against PostgreSQL. Verify your password in Supabase Dashboard, and ensure any special characters in the password are URL-encoded (e.g., %40 for @, %23 for #).";
+    }
+
     return NextResponse.json(
       {
         ok: false,
         status: "error",
         database: "connection_failed",
-        reason: "database_connection_failed",
+        reason: safeInfo.isMissingProjectRefUser
+          ? "pooler_username_requires_project_ref"
+          : "database_connection_failed",
         database_configured: true,
         error_code: err?.code || (rawMsg.includes("timeout") ? "TIMEOUT" : "UNKNOWN"),
         error_type: err?.name || "Error",
@@ -78,6 +90,9 @@ export async function GET() {
         database_scheme: safeInfo.scheme,
         is_pooler: safeInfo.isPooler,
         has_pgbouncer: safeInfo.hasPgBouncer,
+        username_type: safeInfo.usernameType,
+        is_missing_project_ref_user: safeInfo.isMissingProjectRefUser,
+        diagnostic_hint: diagnosticHint,
         service: "awaaz-jamkhedcha",
         timestamp: new Date().toISOString(),
       },

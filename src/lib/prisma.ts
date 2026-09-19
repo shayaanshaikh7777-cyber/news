@@ -38,44 +38,55 @@ export function normalizeDatabaseUrl(rawUrl: string): string {
   const isSupabasePooler =
     url.includes(":6543") || url.includes("pooler.supabase.com");
 
-  // Determine if query params exist
-  const hasQuery = url.includes("?");
-  const prefix = hasQuery ? "&" : "?";
-
-  const paramsToAdd: string[] = [];
-
-  // 1. Supabase / PgBouncer Transaction Pooler requirements
-  if (isSupabasePooler) {
-    if (!url.includes("pgbouncer=true")) {
-      paramsToAdd.push("pgbouncer=true");
+  try {
+    const parsed = new URL(url);
+    if (isSupabasePooler) {
+      if (!parsed.searchParams.has("pgbouncer")) {
+        parsed.searchParams.set("pgbouncer", "true");
+      }
+      if (!parsed.searchParams.has("connection_limit")) {
+        parsed.searchParams.set("connection_limit", "1");
+      }
     }
-    if (!url.includes("connection_limit=")) {
-      paramsToAdd.push("connection_limit=1");
+    if (!parsed.searchParams.has("connect_timeout")) {
+      parsed.searchParams.set("connect_timeout", "15");
     }
-  }
+    if (!isLocal && !parsed.searchParams.has("sslmode")) {
+      parsed.searchParams.set("sslmode", "require");
+    }
+    return parsed.toString();
+  } catch {
+    // Fallback if password has unencoded special characters
+    const paramsToAdd: string[] = [];
+    if (isSupabasePooler) {
+      if (!url.includes("pgbouncer=true")) {
+        paramsToAdd.push("pgbouncer=true");
+      }
+      if (!url.includes("connection_limit=")) {
+        paramsToAdd.push("connection_limit=1");
+      }
+    }
+    if (!url.includes("connect_timeout=")) {
+      paramsToAdd.push("connect_timeout=15");
+    }
+    if (!isLocal && !url.includes("sslmode=")) {
+      paramsToAdd.push("sslmode=require");
+    }
 
-  // 2. Cold start connection timeout resilience (15 seconds)
-  if (!url.includes("connect_timeout=")) {
-    paramsToAdd.push("connect_timeout=15");
+    if (paramsToAdd.length > 0) {
+      let sep = "?";
+      if (url.endsWith("?") || url.endsWith("&")) {
+        sep = "";
+      } else if (url.includes("?")) {
+        sep = "&";
+      }
+      url += sep + paramsToAdd.join("&");
+    }
+    return url;
   }
-
-  // 3. SSL mode requirement for cloud hosts
-  if (!isLocal && !url.includes("sslmode=")) {
-    paramsToAdd.push("sslmode=require");
-  }
-
-  if (paramsToAdd.length > 0) {
-    url += prefix + paramsToAdd.join("&");
-  }
-
-  return url;
 }
 
-/**
- * Safely extracts non-sensitive database metadata for diagnostics (host, port, scheme).
- * NEVER returns credentials, passwords, or full connection strings.
- */
-export function getSafeDatabaseInfo(): {
+export interface SafeDatabaseInfo {
   exists: boolean;
   scheme: string | null;
   host: string | null;
@@ -83,7 +94,16 @@ export function getSafeDatabaseInfo(): {
   database: string | null;
   isPooler: boolean;
   hasPgBouncer: boolean;
-} {
+  rawHasPgBouncer: boolean;
+  usernameType: "pooler_user" | "direct_user" | "unknown";
+  isMissingProjectRefUser: boolean;
+}
+
+/**
+ * Safely extracts non-sensitive database metadata for diagnostics (host, port, scheme).
+ * NEVER returns credentials, passwords, or full connection strings.
+ */
+export function getSafeDatabaseInfo(): SafeDatabaseInfo {
   const raw = (
     process.env.DATABASE_URL ||
     process.env.POSTGRES_PRISMA_URL ||
@@ -100,39 +120,73 @@ export function getSafeDatabaseInfo(): {
       database: null,
       isPooler: false,
       hasPgBouncer: false,
+      rawHasPgBouncer: false,
+      usernameType: "unknown",
+      isMissingProjectRefUser: false,
     };
   }
 
+  const rawHasPgBouncer = raw.includes("pgbouncer=true");
+  let scheme: string | null = null;
+  let host: string | null = null;
+  let port: string | null = null;
+  let database: string | null = null;
+  let username: string | null = null;
+
   try {
-    // Parse URL safely
     const parsed = new URL(
       raw.startsWith("postgres://")
         ? "postgresql://" + raw.slice("postgres://".length)
         : raw
     );
-
-    return {
-      exists: true,
-      scheme: parsed.protocol.replace(":", ""),
-      host: parsed.hostname || null,
-      port: parsed.port || "5432",
-      database: parsed.pathname ? parsed.pathname.replace("/", "") : null,
-      isPooler: parsed.port === "6543" || parsed.hostname.includes("pooler"),
-      hasPgBouncer: parsed.searchParams.get("pgbouncer") === "true",
-    };
+    scheme = parsed.protocol.replace(":", "");
+    host = parsed.hostname || null;
+    port = parsed.port || "5432";
+    database = parsed.pathname ? parsed.pathname.replace("/", "") : null;
+    username = parsed.username ? decodeURIComponent(parsed.username) : null;
   } catch {
-    // Fallback regex if URL parsing fails on special chars in password
     const hostMatch = raw.match(/@([^:\/?#]+)(?::(\d+))?/);
-    return {
-      exists: true,
-      scheme: raw.startsWith("postgres://") ? "postgres" : "postgresql",
-      host: hostMatch ? hostMatch[1] : "unknown",
-      port: hostMatch && hostMatch[2] ? hostMatch[2] : "5432",
-      database: null,
-      isPooler: raw.includes(":6543") || raw.includes("pooler"),
-      hasPgBouncer: raw.includes("pgbouncer=true"),
-    };
+    scheme = raw.startsWith("postgres://") ? "postgres" : "postgresql";
+    host = hostMatch ? hostMatch[1] : "unknown";
+    port = hostMatch && hostMatch[2] ? hostMatch[2] : "5432";
+    const userMatch = raw.match(/^[a-zA-Z0-9_+.-]+:\/\/([^:@]+)/);
+    if (userMatch) {
+      try {
+        username = decodeURIComponent(userMatch[1]);
+      } catch {
+        username = userMatch[1];
+      }
+    }
   }
+
+  const isPooler =
+    port === "6543" ||
+    (host !== null && host.includes("pooler.supabase.com")) ||
+    raw.includes(":6543") ||
+    raw.includes("pooler.supabase.com");
+
+  // In Supabase Transaction Pooler, username MUST be postgres.<project-ref> (contains a dot).
+  // If user connects to pooler:6543 with simple 'postgres', authentication fails.
+  const usernameType: "pooler_user" | "direct_user" | "unknown" = !username
+    ? "unknown"
+    : username.includes(".")
+    ? "pooler_user"
+    : "direct_user";
+
+  const isMissingProjectRefUser = isPooler && usernameType === "direct_user";
+
+  return {
+    exists: true,
+    scheme,
+    host,
+    port,
+    database,
+    isPooler,
+    hasPgBouncer: rawHasPgBouncer || isPooler, // Handled automatically at runtime via normalizeDatabaseUrl
+    rawHasPgBouncer,
+    usernameType,
+    isMissingProjectRefUser,
+  };
 }
 
 /**
@@ -242,10 +296,23 @@ const FAILURE_RETRY_MS = 4000; // Retry after 4 seconds on failure
 export function getLastDatabaseError(): {
   error: string | null;
   code: string | null;
+  hint: string | null;
 } {
+  const safeDb = getSafeDatabaseInfo();
+  let hint: string | null = null;
+
+  if (safeDb.isMissingProjectRefUser) {
+    hint =
+      "Supabase Connection Pooler (पोर्ट 6543) साठी युझरनेम 'postgres.[project-ref]' असणे आवश्यक आहे. युझरनेममध्ये प्रोजेक्ट संदर्भ नसल्यामुळे ऑथेंटिकेशन अयशस्वी ठरत आहे.";
+  } else if (lastDbError && lastDbError.includes("Authentication failed")) {
+    hint =
+      "डेटाबेस ऑथेंटिकेशन अयशस्वी झाले. कृपया Supabase Dashboard मधून अचूक क्रेडेंशियल्स तपासा आणि पासवर्डमधील विशेष चिन्हे URL-encode करा.";
+  }
+
   return {
     error: lastDbError,
     code: lastDbErrorCode,
+    hint,
   };
 }
 

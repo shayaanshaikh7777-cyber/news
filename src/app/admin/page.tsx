@@ -159,25 +159,43 @@ export default async function AdminDashboardPage() {
         </div>
       ) : !dbReady ? (
         <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3 flex-1">
             <div className="p-2 bg-red-200 text-red-900 rounded-xl flex-shrink-0 mt-0.5">
               <AlertCircle className="w-5 h-5" />
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
+            <div className="space-y-1.5 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm font-black text-red-950">
                   डेटाबेस कनेक्शन अयशस्वी (Database Connection Failed)
                 </h3>
                 <span className="bg-red-200 text-red-900 text-[10px] font-mono px-2 py-0.5 rounded font-bold">
                   {lastError.code || "CONNECTION_FAILED"}
                 </span>
+                {safeDb.isPooler && (
+                  <span className="bg-blue-100 text-blue-900 text-[10px] font-mono px-2 py-0.5 rounded font-bold">
+                    Supabase Pooler (Port {safeDb.port || "6543"})
+                  </span>
+                )}
               </div>
               <p className="text-xs text-red-800 leading-relaxed">
                 DATABASE_URL कॉन्फिगर केलेले आहे ({safeDb.host || "host"}:{safeDb.port || "5432"}), परंतु PostgreSQL डेटाबेसशी थेट संपर्क साधता आला नाही.
               </p>
-              {safeDb.isPooler && !safeDb.hasPgBouncer && (
+              {safeDb.isMissingProjectRefUser && (
+                <div className="text-xs text-amber-950 bg-amber-100/90 border border-amber-300 p-2.5 rounded-xl mt-1 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <span>⚠️</span> Supabase Transaction Pooler युझरनेम दुरुस्ती आवश्यक:
+                  </p>
+                  <p className="text-[11px] leading-relaxed">
+                    तुम्ही पोर्ट 6543 (Transaction Pooler) वापरत आहात. Supabase Pooler साठी युझरनेम फक्त <code>postgres</code> चालत नाही, तर <code>postgres.[तुमचा-प्रकल्प-संदर्भ]</code> (उदा. <code>postgres.vytppjxwrnqvtnrgfpqt</code>) असणे बंधनकारक आहे.
+                  </p>
+                  <p className="text-[11px] text-amber-900 font-medium">
+                    &rarr; Supabase Dashboard &rarr; Project Settings &rarr; Database &rarr; Connection string (Transaction pooler) मधून युझरनेम तपासा आणि Vercel मध्ये DATABASE_URL अपडेट करा.
+                  </p>
+                </div>
+              )}
+              {lastError.hint && !safeDb.isMissingProjectRefUser && (
                 <p className="text-[11px] text-red-950 font-semibold bg-red-100 p-2 rounded-lg mt-1 border border-red-200">
-                  💡 Supabase Transaction Pooler (पोर्ट 6543) साठी कनेक्शन स्ट्रिंगच्या शेवटी <code>?pgbouncer=true</code> जोडणे आवश्यक आहे.
+                  💡 {lastError.hint}
                 </p>
               )}
             </div>
@@ -185,7 +203,7 @@ export default async function AdminDashboardPage() {
           <a
             href="/api/health"
             target="_blank"
-            className="text-xs bg-red-800 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl whitespace-nowrap transition-colors"
+            className="text-xs bg-red-800 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl whitespace-nowrap transition-colors flex-shrink-0"
           >
             आरोग्य चाचणी (Health Check) &rarr;
           </a>
