@@ -82,6 +82,7 @@ export default function AdminSidebar({ user }: { user: SessionUser }) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
                 isActive
                   ? "bg-red-800 text-white shadow-sm"
@@ -107,6 +108,7 @@ export default function AdminSidebar({ user }: { user: SessionUser }) {
         <Link
           href="/"
           target="_blank"
+          prefetch={false}
           className="flex items-center justify-center gap-1.5 w-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold py-2 rounded-lg transition-colors border border-gray-700"
         >
           <span>पोर्टल पाहा (Public Site) &rarr;</span>

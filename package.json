@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && node -e \"try { require('child_process').execSync('npx prisma migrate deploy', { stdio: 'inherit' }); } catch (e) { console.log('[Prisma Migrate Notice] Deploy skipped or database offline during build'); }\" && next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
     "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.js",
     "db:studio": "prisma studio"

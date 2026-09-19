@@ -15,8 +15,8 @@ const nextConfig: NextConfig = {
     },
   },
   outputFileTracingIncludes: {
-    "/api/**/*": ["./node_modules/.prisma/client/**/*"],
-    "/**/*": ["./node_modules/.prisma/client/**/*"],
+    "/api/**/*": ["./node_modules/.prisma/client/**/*", "./prisma/migrations/**/*"],
+    "/**/*": ["./node_modules/.prisma/client/**/*", "./prisma/migrations/**/*"],
   },
 };
 

@@ -38,6 +38,8 @@ export function normalizeDatabaseUrl(rawUrl: string): string {
   const isSupabasePooler =
     url.includes(":6543") || url.includes("pooler.supabase.com");
 
+  const defaultLimit = process.env.PRISMA_CONNECTION_LIMIT || "10";
+
   try {
     const parsed = new URL(url);
     if (isSupabasePooler) {
@@ -45,7 +47,14 @@ export function normalizeDatabaseUrl(rawUrl: string): string {
         parsed.searchParams.set("pgbouncer", "true");
       }
       if (!parsed.searchParams.has("connection_limit")) {
-        parsed.searchParams.set("connection_limit", "1");
+        parsed.searchParams.set("connection_limit", defaultLimit);
+      }
+      if (!parsed.searchParams.has("pool_timeout")) {
+        parsed.searchParams.set("pool_timeout", "30");
+      }
+    } else {
+      if (!parsed.searchParams.has("pool_timeout")) {
+        parsed.searchParams.set("pool_timeout", "30");
       }
     }
     if (!parsed.searchParams.has("connect_timeout")) {
@@ -63,7 +72,14 @@ export function normalizeDatabaseUrl(rawUrl: string): string {
         paramsToAdd.push("pgbouncer=true");
       }
       if (!url.includes("connection_limit=")) {
-        paramsToAdd.push("connection_limit=1");
+        paramsToAdd.push(`connection_limit=${defaultLimit}`);
+      }
+      if (!url.includes("pool_timeout=")) {
+        paramsToAdd.push("pool_timeout=30");
+      }
+    } else {
+      if (!url.includes("pool_timeout=")) {
+        paramsToAdd.push("pool_timeout=30");
       }
     }
     if (!url.includes("connect_timeout=")) {
