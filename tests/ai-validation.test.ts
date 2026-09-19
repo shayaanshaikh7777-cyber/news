@@ -82,5 +82,23 @@ describe("AI News Studio Zod Schemas & Structured Output Validation", () => {
       expect(parsed.success).toBe(true);
     });
   });
+
+  it("validates AIStudioInputSchema accepts categoryId and imageUrl", () => {
+    const inputWithMedia = {
+      notes: "जामखेड कृषी उत्पन्न बाजार समितीमध्ये कांद्याची विक्रमी आवक.",
+      location: "जामखेड",
+      language: "marathi" as const,
+      action: "GENERATE_ARTICLE" as const,
+      categoryId: "cat-agriculture-123",
+      imageUrl: "/uploads/media/jamkhed-market-2026.webp",
+    };
+
+    const parsed = AIStudioInputSchema.safeParse(inputWithMedia);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.categoryId).toBe("cat-agriculture-123");
+      expect(parsed.data.imageUrl).toBe("/uploads/media/jamkhed-market-2026.webp");
+    }
+  });
 });
 

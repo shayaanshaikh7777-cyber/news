@@ -16,6 +16,8 @@ import { uploadAndOptimizeMediaAction } from "@/actions/media.actions";
 
 interface FeaturedImageUploaderProps {
   initialImageUrl?: string | null;
+  value?: string | null;
+  onChange?: (url: string) => void;
   name?: string;
   label?: string;
   required?: boolean;
@@ -23,11 +25,19 @@ interface FeaturedImageUploaderProps {
 
 export default function FeaturedImageUploader({
   initialImageUrl = "",
+  value,
+  onChange,
   name = "featuredImage",
   label = "मुख्य बातमी फोटो (Featured News Image)",
   required = false,
 }: FeaturedImageUploaderProps) {
-  const [imageUrl, setImageUrl] = useState<string>(initialImageUrl || "");
+  const [internalUrl, setInternalUrl] = useState<string>(initialImageUrl || "");
+  const imageUrl = value !== undefined ? (value || "") : internalUrl;
+
+  const setImageUrl = (url: string) => {
+    setInternalUrl(url);
+    if (onChange) onChange(url);
+  };
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);

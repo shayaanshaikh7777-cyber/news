@@ -37,6 +37,8 @@ export function buildEditorialPrompt(input: AIStudioInput): string {
   return `Task Action: ${input.action}
 Input Language: ${input.language}
 Location Context: ${input.location || "जामखेड / अहिल्यानगर"}
+${input.categoryId ? `News Category Reference: ${input.categoryId}` : ""}
+${input.imageUrl ? `Featured Image Attached: ${input.imageUrl}` : ""}
 Reporter Notes & Bullet Points:
 """
 ${input.notes}

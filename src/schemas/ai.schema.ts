@@ -53,6 +53,8 @@ export const AIStudioInputSchema = z.object({
   location: z.string().optional(),
   language: z.enum(["marathi", "hindi", "english"]).default("marathi"),
   action: AIActionTypeSchema.default("GENERATE_ARTICLE"),
+  categoryId: z.string().optional(),
+  imageUrl: z.string().optional(),
 });
 
 export type AIStudioInput = z.infer<typeof AIStudioInputSchema>;

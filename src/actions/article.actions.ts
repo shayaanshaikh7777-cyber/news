@@ -16,6 +16,11 @@ export async function createAIDraftArticleAction(data: {
   bodyMarkdown: string;
   categoryId?: string;
   locationId?: string;
+  featuredImage?: string;
+  slug?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
 }): Promise<{ success: boolean; draftId?: string; error?: string }> {
   const user = await getCurrentUser();
   if (!user || !isReporter(user.role)) {
@@ -41,7 +46,9 @@ export async function createAIDraftArticleAction(data: {
       return { success: false, error: "कृपया बातमीसाठी किमान एक विभाग (Category) निवडा." };
     }
 
-    const cleanSlug = `awaaz-ai-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
+    const cleanSlug =
+      data.slug?.trim() ||
+      `awaaz-ai-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
     const wordCount = (data.bodyMarkdown || "").split(/\s+/).length;
     const readingTime = Math.max(1, Math.round(wordCount / 150));
 
@@ -53,6 +60,10 @@ export async function createAIDraftArticleAction(data: {
         bodyMarkdown: data.bodyMarkdown?.trim() || "",
         categoryId: catId,
         locationId: data.locationId || null,
+        featuredImage: data.featuredImage?.trim() || null,
+        seoTitle: data.seoTitle?.trim() || null,
+        seoDescription: data.seoDescription?.trim() || null,
+        seoKeywords: data.seoKeywords?.trim() || null,
         createdById: user.id,
         status: "DRAFT",
         slug: cleanSlug,
