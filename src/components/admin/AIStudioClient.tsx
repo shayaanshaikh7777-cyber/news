@@ -148,6 +148,10 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
 
   const handleCreateDraft = async () => {
     if (!result) return;
+    if (!categoryId) {
+      setError("AI ने दिलेला विभाग उपलब्ध नाही. कृपया उपलब्ध विभागातून Category निवडा.");
+      return;
+    }
     setIsCreatingDraft(true);
     setError("");
     try {
@@ -156,7 +160,7 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
         subheadline: result.subheadline,
         summary: result.summary,
         bodyMarkdown: result.body_markdown,
-        categoryId: categoryId || undefined,
+        categoryId: categoryId,
         featuredImage: featuredImage || undefined,
         slug: result.seo?.slug,
         seoTitle: result.seo?.meta_title,
@@ -285,17 +289,23 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
                 <Layers className="w-3.5 h-3.5 text-purple-700" />
                 <span>बातमी विभाग (Category):</span>
               </label>
-              <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full border border-gray-300 rounded p-2.5 text-xs bg-gray-50 font-semibold text-gray-900"
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nameMarathi} ({c.name})
-                  </option>
-                ))}
-              </select>
+              {categories.length > 0 ? (
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="w-full border border-gray-300 rounded p-2.5 text-xs bg-gray-50 font-semibold text-gray-900 focus:ring-2 focus:ring-purple-700"
+                >
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nameMarathi} ({c.name})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="p-3 bg-amber-50 text-amber-900 rounded-lg border border-amber-200 text-xs font-medium">
+                  ⚠️ डेटाबेसमध्ये कोणताही बातमी विभाग उपलब्ध नाही (Production Category table is empty). कृपया ॲडमिन पॅनलमधून प्रथम विभाग तयार करा.
+                </div>
+              )}
             </div>
 
             {/* Photo Upload with Sharp Optimizer */}

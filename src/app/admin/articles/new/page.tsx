@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Sparkles, ArrowLeft, FileEdit } from "lucide-react";
 import { isEditor } from "@/lib/rbac";
 import NewArticleForm from "@/components/admin/NewArticleForm";
+import { getOrSeedCategories } from "@/lib/categories";
 
 interface Props {
   searchParams?: Promise<{
@@ -33,7 +34,7 @@ export default async function NewArticlePage({ searchParams }: Props) {
   if (dbUp) {
     try {
       const [cats, locs, reps] = await Promise.all([
-        prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+        getOrSeedCategories(),
         prisma.location.findMany({ orderBy: { village: "asc" } }),
         prisma.reporterProfile.findMany({ orderBy: { nameMarathi: "asc" } }),
       ]);
@@ -49,17 +50,6 @@ export default async function NewArticlePage({ searchParams }: Props) {
     } catch (e) {
       console.error("[NewArticlePage DB query error]", e);
     }
-  }
-
-  // Fallback defaults if tables are empty
-  if (categories.length === 0) {
-    categories = [
-      { id: "cat-jamkhed", name: "Jamkhed", nameMarathi: "जामखेड विशेष" },
-      { id: "cat-politics", name: "Politics", nameMarathi: "राजकारण" },
-      { id: "cat-agriculture", name: "Agriculture", nameMarathi: "शेती व हवामान" },
-      { id: "cat-crime", name: "Crime", nameMarathi: "गुन्हेगारी" },
-      { id: "cat-sports", name: "Sports", nameMarathi: "क्रीडा" },
-    ];
   }
 
   // Prepopulate values: database draft takes precedence over URL query parameters

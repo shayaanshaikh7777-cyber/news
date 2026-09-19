@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 import crypto from "crypto";
 
 export interface StoredMediaPaths {
@@ -7,11 +8,16 @@ export interface StoredMediaPaths {
   thumbnailUrl: string;
   masterFilename: string;
   thumbnailFilename: string;
+  storageTarget: "public" | "tmp";
+  dataUrl?: string;
+  thumbnailDataUrl?: string;
 }
 
 /**
  * Persists an optimized image and its responsive thumbnail to storage.
- * Defaults to local static folder (public/uploads/media/...) with content-addressed hashing.
+ * Seamlessly handles:
+ * 1. Standard persistent environments (writes to public/uploads/media/...)
+ * 2. Read-only serverless environments like Vercel (writes to /tmp/uploads/media/...)
  */
 export async function storeOptimizedImage(
   masterBuffer: Buffer,
@@ -23,37 +29,64 @@ export async function storeOptimizedImage(
   const month = String(now.getMonth() + 1).padStart(2, "0");
 
   const relativeDir = path.join("uploads", "media", year, month);
-  const absoluteDir = path.join(process.cwd(), "public", relativeDir);
-
-  if (!fs.existsSync(absoluteDir)) {
-    fs.mkdirSync(absoluteDir, { recursive: true });
-  }
-
-  // Cryptographically unique content hash
   const hash = crypto.randomBytes(12).toString("hex");
   const masterFilename = `awaaz-${hash}.${format}`;
   const thumbnailFilename = `awaaz-${hash}-thumb.${format}`;
 
-  const masterPath = path.join(absoluteDir, masterFilename);
-  const thumbnailPath = path.join(absoluteDir, thumbnailFilename);
+  let storageTarget: "public" | "tmp" = "public";
+  let targetDir = path.join(process.cwd(), "public", relativeDir);
+
+  // Check if public/uploads directory is writable
+  let canWritePublic = false;
+  try {
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    const testFile = path.join(targetDir, `.write-test-${hash}`);
+    fs.writeFileSync(testFile, "test");
+    fs.unlinkSync(testFile);
+    canWritePublic = true;
+  } catch {
+    canWritePublic = false;
+  }
+
+  if (!canWritePublic) {
+    // Vercel serverless environment has read-only public/ — use os.tmpdir()
+    storageTarget = "tmp";
+    targetDir = path.join(os.tmpdir(), relativeDir);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+  }
+
+  const masterPath = path.join(targetDir, masterFilename);
+  const thumbnailPath = path.join(targetDir, thumbnailFilename);
 
   await fs.promises.writeFile(masterPath, masterBuffer);
   await fs.promises.writeFile(thumbnailPath, thumbnailBuffer);
 
-  // Return forward-slash web-accessible URLs
+  // Standard web URLs
   const masterUrl = `/${relativeDir.replace(/\\/g, "/")}/${masterFilename}`;
   const thumbnailUrl = `/${relativeDir.replace(/\\/g, "/")}/${thumbnailFilename}`;
+
+  // Data URLs for instant preview and serverless instance resilience
+  const mimeType = format === "avif" ? "image/avif" : `image/${format}`;
+  const dataUrl = `data:${mimeType};base64,${masterBuffer.toString("base64")}`;
+  const thumbnailDataUrl = `data:image/webp;base64,${thumbnailBuffer.toString("base64")}`;
 
   return {
     masterUrl,
     thumbnailUrl,
     masterFilename,
     thumbnailFilename,
+    storageTarget,
+    dataUrl,
+    thumbnailDataUrl,
   };
 }
 
 /**
- * Safely removes stored files from disk.
+ * Safely removes stored files from disk (checking both public and tmp directories).
  */
 export async function deleteStoredMediaFiles(
   masterUrl: string,
@@ -63,9 +96,17 @@ export async function deleteStoredMediaFiles(
     if (!urlStr || !urlStr.startsWith("/uploads/")) return;
     try {
       const relative = urlStr.replace(/^\//, "").replace(/\//g, path.sep);
-      const abs = path.join(process.cwd(), "public", relative);
-      if (fs.existsSync(abs)) {
-        await fs.promises.unlink(abs);
+
+      // Check public
+      const publicPath = path.join(process.cwd(), "public", relative);
+      if (fs.existsSync(publicPath)) {
+        await fs.promises.unlink(publicPath).catch(() => {});
+      }
+
+      // Check tmp
+      const tmpPath = path.join(os.tmpdir(), relative);
+      if (fs.existsSync(tmpPath)) {
+        await fs.promises.unlink(tmpPath).catch(() => {});
       }
     } catch (e) {
       console.warn("[deleteStoredMediaFiles error]", e);
@@ -77,4 +118,3 @@ export async function deleteStoredMediaFiles(
     await removeUrl(thumbnailUrl);
   }
 }
-

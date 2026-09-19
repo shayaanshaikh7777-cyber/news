@@ -150,15 +150,25 @@ export async function optimizeImageBuffer(
   let finalMime: string;
 
   if (preferredFormat === "avif") {
-    finalFormat = "avif";
-    finalMime = "image/avif";
-    finalBuffer = await pipeline
-      .avif({
-        quality: Math.min(quality, 75),
-        effort: 4,
-        chromaSubsampling: hasAlpha ? "4:4:4" : "4:2:0",
-      })
-      .toBuffer();
+    try {
+      finalFormat = "avif";
+      finalMime = "image/avif";
+      finalBuffer = await pipeline
+        .avif({
+          quality: Math.min(quality, 75),
+          effort: 4,
+          chromaSubsampling: hasAlpha ? "4:4:4" : "4:2:0",
+        })
+        .toBuffer();
+    } catch (avifErr) {
+      console.warn("[Sharp] AVIF encoding failed, falling back to WebP:", avifErr);
+      finalFormat = "webp";
+      finalMime = "image/webp";
+      finalBuffer = await sharp(inputBuffer)
+        .rotate()
+        .webp({ quality, effort: 4 })
+        .toBuffer();
+    }
   } else {
     // Default to WebP: universal support and exceptional compression
     finalFormat = "webp";

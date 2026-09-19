@@ -128,5 +128,17 @@ describe("Media Optimizer — Sharp Image Optimization", () => {
     expect(result.width).toBe(1200);
     expect(result.height).toBe(600); // 2:1 aspect ratio maintained
   });
+
+  it("persists optimized image and thumbnail with storeOptimizedImage without throwing", async () => {
+    const { storeOptimizedImage } = await import("../src/lib/media/storage");
+    const dummyMaster = Buffer.from("dummy-master-webp-content");
+    const dummyThumb = Buffer.from("dummy-thumb-webp-content");
+
+    const stored = await storeOptimizedImage(dummyMaster, dummyThumb, "webp");
+    expect(stored.masterUrl).toContain("/uploads/media/");
+    expect(stored.thumbnailUrl).toContain("/uploads/media/");
+    expect(stored.dataUrl).toContain("data:image/webp;base64,");
+    expect(["public", "tmp"]).toContain(stored.storageTarget);
+  });
 });
 

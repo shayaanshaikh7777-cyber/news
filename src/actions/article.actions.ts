@@ -8,6 +8,7 @@ import { ArticleFormSchema, LiveUpdateFormSchema } from "@/schemas/article.schem
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { recordAuditLog } from "@/lib/audit";
+import { resolveExistingCategoryId } from "@/lib/categories";
 
 export async function createAIDraftArticleAction(data: {
   headline: string;
@@ -32,19 +33,12 @@ export async function createAIDraftArticleAction(data: {
       return { success: false, error: "डेटाबेस सध्या उपलब्ध नाही (Database Offline)." };
     }
 
-    // Resolve categoryId if not provided (fallback to first active category)
-    let catId = data.categoryId;
-    if (!catId) {
-      const defaultCategory = await prisma.category.findFirst({
-        where: { isActive: true },
-        orderBy: { sortOrder: "asc" },
-      });
-      catId = defaultCategory?.id;
+    // Verify category exists in production Category table to prevent Article_categoryId_fkey violation
+    const catResolution = await resolveExistingCategoryId(data.categoryId);
+    if (!catResolution.success) {
+      return { success: false, error: catResolution.error };
     }
-
-    if (!catId) {
-      return { success: false, error: "कृपया बातमीसाठी किमान एक विभाग (Category) निवडा." };
-    }
+    const catId = catResolution.categoryId;
 
     const cleanSlug =
       data.slug?.trim() ||
@@ -213,6 +207,13 @@ export async function createArticleAction(formData: FormData): Promise<void> {
     return;
   }
 
+  const catResolution = await resolveExistingCategoryId(parsed.data.categoryId);
+  if (!catResolution.success) {
+    console.error("[createArticleAction category error]:", catResolution.error);
+    return;
+  }
+  const validCategoryId = catResolution.categoryId;
+
   const cleanSlug =
     parsed.data.slug?.trim() ||
     `awaaz-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
@@ -248,6 +249,7 @@ export async function createArticleAction(formData: FormData): Promise<void> {
         where: { id: draftId },
         data: {
           ...parsed.data,
+          categoryId: validCategoryId,
           status: finalStatus,
           slug: parsed.data.slug?.trim() || existing.slug,
           readingTimeMinutes: readingTime,
@@ -263,6 +265,7 @@ export async function createArticleAction(formData: FormData): Promise<void> {
     article = await prisma.article.create({
       data: {
         ...parsed.data,
+        categoryId: validCategoryId,
         status: finalStatus,
         slug: cleanSlug,
         readingTimeMinutes: readingTime,

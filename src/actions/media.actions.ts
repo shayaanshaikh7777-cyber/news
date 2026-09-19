@@ -99,7 +99,7 @@ export async function uploadAndOptimizeMediaAction(
               originalName,
               optimizedName: stored.masterFilename,
               url: stored.masterUrl,
-              thumbnailUrl: stored.thumbnailUrl,
+              thumbnailUrl: stored.thumbnailDataUrl || stored.thumbnailUrl,
               mimeType: optimized.mimeType,
               format: optimized.format,
               width: optimized.width,
@@ -123,7 +123,7 @@ export async function uploadAndOptimizeMediaAction(
         originalName,
         optimizedName: stored.masterFilename,
         url: stored.masterUrl,
-        thumbnailUrl: stored.thumbnailUrl,
+        thumbnailUrl: stored.thumbnailDataUrl || stored.thumbnailUrl,
         mimeType: optimized.mimeType,
         format: optimized.format,
         width: optimized.width,
@@ -137,7 +137,15 @@ export async function uploadAndOptimizeMediaAction(
         uploaderName: user.name,
       });
     } catch (err: any) {
-      console.error(`[Upload error on ${file.name}]:`, err);
+      // Diagnostic server log for production debugging (Sanitized: NO keys, secrets or credentials)
+      console.error("[IMAGE_OPTIMIZATION_ERROR]", {
+        errorType: err?.name || "ImageOptimizationError",
+        fileName: file.name,
+        mimeType: file.type,
+        inputSize: file.size,
+        message: err?.message || "Unknown error",
+        stage: err?.stage || "OPTIMIZATION_OR_STORAGE",
+      });
       errors.push(`${file.name}: ${err?.message || "प्रक्रिया अयशस्वी"}`);
     }
   }
@@ -166,7 +174,9 @@ export async function uploadAndOptimizeMediaAction(
 
   return {
     success: false,
-    message: "इमेज ऑप्टिमाइझ करताना त्रुटी आली.",
+    message: errors.length > 0 && errors[0].includes(":")
+      ? `इमेज ऑप्टिमाइझ करताना त्रुटी आली: ${errors[0].split(":")[1]?.trim()}`
+      : "इमेज ऑप्टिमाइझ करताना त्रुटी आली.",
     errors,
   };
 }
