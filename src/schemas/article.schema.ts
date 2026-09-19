@@ -5,7 +5,20 @@ export const ArticleFormSchema = z.object({
   subheadline: z.string().optional().nullable(),
   summary: z.string().optional().nullable(),
   bodyMarkdown: z.string().min(10, "बातमीचा मजकूर आवश्यक आहे"),
-  featuredImage: z.string().url("वैध इमेज URL द्या").optional().nullable().or(z.literal("")),
+  featuredImage: z
+    .string()
+    .refine(
+      (val) =>
+        !val ||
+        val.startsWith("/") ||
+        val.startsWith("http://") ||
+        val.startsWith("https://") ||
+        val.startsWith("data:image/"),
+      { message: "कृपया वैध इमेज URL किंवा पाथ प्रविष्ट करा" }
+    )
+    .optional()
+    .nullable()
+    .or(z.literal("")),
   gallery: z.string().optional().nullable(), // JSON string
   youtubeUrl: z
     .string()
@@ -24,7 +37,7 @@ export const ArticleFormSchema = z.object({
       },
       { message: "कृपया वैध YouTube लिंक प्रविष्ट करा" }
     ),
-  categoryId: z.string().min(1, "वर्ग निवडणे आवश्यक आहे"),
+  categoryId: z.string().min(1, "कृपया बातमीसाठी विभाग (Category) निवडा"),
   locationId: z.string().optional().nullable(),
   reporterId: z.string().optional().nullable(),
   source: z.string().optional().nullable(),

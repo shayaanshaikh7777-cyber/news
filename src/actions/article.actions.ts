@@ -198,6 +198,7 @@ export async function createArticleAction(formData: FormData): Promise<void> {
 
   const parsed = ArticleFormSchema.safeParse(raw);
   if (!parsed.success) {
+    console.error("[createArticleAction validation error]", parsed.error.format());
     return;
   }
 
@@ -210,6 +211,23 @@ export async function createArticleAction(formData: FormData): Promise<void> {
   const readingTime = Math.max(1, Math.round(wordCount / 150));
 
   const draftId = formData.get("draftId") as string;
+  const requestedStatus = (formData.get("status") as string) || "DRAFT";
+  const userIsEditor = isEditor(user.role);
+
+  let finalStatus = "DRAFT";
+  let publishedAt: Date | null = null;
+  let publishedById: string | null = null;
+  let submittedById: string | null = null;
+
+  if (requestedStatus === "PUBLISHED" && userIsEditor) {
+    finalStatus = "PUBLISHED";
+    publishedAt = new Date();
+    publishedById = user.id;
+  } else if (requestedStatus === "SUBMITTED" || (requestedStatus === "PUBLISHED" && !userIsEditor)) {
+    finalStatus = "SUBMITTED";
+    submittedById = user.id;
+  }
+
   let article: any = null;
 
   if (draftId) {
@@ -219,9 +237,12 @@ export async function createArticleAction(formData: FormData): Promise<void> {
         where: { id: draftId },
         data: {
           ...parsed.data,
+          status: finalStatus,
           slug: parsed.data.slug?.trim() || existing.slug,
           readingTimeMinutes: readingTime,
-          submittedById: parsed.data.status === "SUBMITTED" ? user.id : existing.submittedById,
+          publishedAt: publishedAt || existing.publishedAt,
+          publishedById: publishedById || existing.publishedById,
+          submittedById: submittedById || existing.submittedById,
         },
       });
     }
@@ -231,10 +252,13 @@ export async function createArticleAction(formData: FormData): Promise<void> {
     article = await prisma.article.create({
       data: {
         ...parsed.data,
+        status: finalStatus,
         slug: cleanSlug,
         readingTimeMinutes: readingTime,
         createdById: user.id,
-        submittedById: parsed.data.status === "SUBMITTED" ? user.id : null,
+        publishedAt,
+        publishedById,
+        submittedById,
       },
     });
   }
@@ -280,6 +304,25 @@ export async function updateArticleAction(articleId: string, formData: FormData)
     return;
   }
 
+  const requestedStatus = (formData.get("status") as string) || existing.status;
+  const userIsEditor = isEditor(user.role);
+
+  let finalStatus = existing.status;
+  let publishedAt = existing.publishedAt;
+  let publishedById = existing.publishedById;
+  let submittedById = existing.submittedById;
+
+  if (requestedStatus === "PUBLISHED" && userIsEditor) {
+    finalStatus = "PUBLISHED";
+    publishedAt = existing.publishedAt || new Date();
+    publishedById = user.id;
+  } else if (requestedStatus === "SUBMITTED") {
+    finalStatus = "SUBMITTED";
+    submittedById = user.id;
+  } else if (requestedStatus === "DRAFT") {
+    finalStatus = "DRAFT";
+  }
+
   const raw = {
     headline: formData.get("headline") as string,
     subheadline: (formData.get("subheadline") as string) || null,
@@ -293,7 +336,7 @@ export async function updateArticleAction(articleId: string, formData: FormData)
     source: (formData.get("source") as string) || null,
     priority: Number(formData.get("priority") || 0),
     isBreaking: formData.get("isBreaking") === "true" || formData.get("isBreaking") === "on",
-    status: existing.status,
+    status: finalStatus,
     seoTitle: (formData.get("seoTitle") as string) || null,
     seoDescription: (formData.get("seoDescription") as string) || null,
     seoKeywords: (formData.get("seoKeywords") as string) || null,
@@ -302,6 +345,7 @@ export async function updateArticleAction(articleId: string, formData: FormData)
 
   const parsed = ArticleFormSchema.safeParse(raw);
   if (!parsed.success) {
+    console.error("[updateArticleAction validation error]", parsed.error.format());
     return;
   }
 
@@ -322,6 +366,10 @@ export async function updateArticleAction(articleId: string, formData: FormData)
     where: { id: articleId },
     data: {
       ...parsed.data,
+      status: finalStatus,
+      publishedAt,
+      publishedById,
+      submittedById,
       slug: newSlug,
       readingTimeMinutes: readingTime,
     },

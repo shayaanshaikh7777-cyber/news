@@ -21,7 +21,9 @@ import {
   Newspaper,
   AlertTriangle,
   Database,
+  Layers,
 } from "lucide-react";
+import FeaturedImageUploader from "@/components/admin/FeaturedImageUploader";
 import { canEditArticle, isEditor, isSuperAdmin } from "@/lib/rbac";
 import { ALLOWED_TRANSITIONS, ArticleStatus } from "@/lib/workflow";
 
@@ -204,9 +206,10 @@ export default async function EditArticlePage({ params }: Props) {
             action={updateArticleAction.bind(null, article.id)}
             className="space-y-6 text-xs sm:text-sm"
           >
+            {/* 1. TITLE */}
             <div>
               <label className="block font-bold text-gray-900 mb-1">
-                मुख्य शीर्षक (Headline) *
+                मुख्य शीर्षक (Headline / Title) *
               </label>
               <input
                 type="text"
@@ -217,84 +220,97 @@ export default async function EditArticlePage({ params }: Props) {
               />
             </div>
 
+            {/* 2. SLUG */}
             <div>
               <label className="block font-bold text-gray-800 mb-1">
-                उपशीर्षक / देख (Subheadline / Dek)
+                URL स्लग (Slug)
               </label>
               <input
                 type="text"
-                name="subheadline"
-                defaultValue={article.subheadline || ""}
-                className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
+                name="slug"
+                defaultValue={article.slug}
+                className="w-full border border-gray-300 rounded-lg p-2.5 text-xs font-mono text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
               />
             </div>
 
-            <div>
-              <label className="block font-bold text-gray-800 mb-1">
-                बातमीचा सारांश (Summary)
-              </label>
-              <textarea
-                name="summary"
-                rows={2}
-                defaultValue={article.summary || ""}
-                className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-gray-900 mb-1">
-                सविस्तर बातमी मजकूर (Body Markdown) *
-              </label>
-              <textarea
-                name="bodyMarkdown"
+            {/* 3. CATEGORY */}
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block font-bold text-gray-900 text-xs sm:text-sm flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-red-700" />
+                  <span>बातमी विभाग (News Category) *</span>
+                </label>
+                <span className="text-[11px] text-gray-500">
+                  डेटाबेस मधील {categories.length} विभाग उपलब्ध
+                </span>
+              </div>
+              <select
+                name="categoryId"
                 required
-                rows={12}
-                defaultValue={article.bodyMarkdown}
-                className="w-full font-mono text-xs sm:text-sm border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
+                defaultValue={article.categoryId}
+                className="w-full border border-gray-300 rounded-lg p-3 text-xs sm:text-sm font-bold text-gray-900 bg-white focus:ring-2 focus:ring-red-700 focus:outline-none shadow-xs"
+              >
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nameMarathi} ({c.name})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 4. FEATURED IMAGE (Sharp Optimized Image Uploader) */}
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <FeaturedImageUploader
+                initialImageUrl={article.featuredImage}
+                name="featuredImage"
+                label="मुख्य बातमी फोटो / कव्हर इमेज (Featured Image)"
               />
             </div>
 
-            {/* Media */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+            {/* 5. CONTENT: Subheadline, Summary & Body Markdown */}
+            <div className="space-y-4">
               <div>
-                <label className="block font-bold text-gray-800 mb-1">फोटो URL</label>
+                <label className="block font-bold text-gray-800 mb-1">
+                  उपशीर्षक / देख (Subheadline / Dek)
+                </label>
                 <input
-                  type="url"
-                  name="featuredImage"
-                  defaultValue={article.featuredImage || ""}
-                  className="w-full border border-gray-300 rounded p-2 text-xs"
+                  type="text"
+                  name="subheadline"
+                  defaultValue={article.subheadline || ""}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
                 />
               </div>
+
               <div>
-                <label className="block font-bold text-gray-800 mb-1">YouTube व्हिडिओ लिंक</label>
-                <input
-                  type="url"
-                  name="youtubeUrl"
-                  defaultValue={article.youtubeUrl || ""}
-                  className="w-full border border-gray-300 rounded p-2 text-xs"
+                <label className="block font-bold text-gray-800 mb-1">
+                  बातमीचा सारांश (Summary)
+                </label>
+                <textarea
+                  name="summary"
+                  rows={2}
+                  defaultValue={article.summary || ""}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-900 mb-1">
+                  सविस्तर बातमी मजकूर (Body Markdown) *
+                </label>
+                <textarea
+                  name="bodyMarkdown"
+                  required
+                  rows={12}
+                  defaultValue={article.bodyMarkdown}
+                  className="w-full font-mono text-xs sm:text-sm border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
                 />
               </div>
             </div>
 
-            {/* Taxonomy */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* 6. LOCATION & REPORTER */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block font-bold text-gray-800 mb-1">विभाग (Category)</label>
-                <select
-                  name="categoryId"
-                  defaultValue={article.categoryId}
-                  className="w-full border border-gray-300 rounded p-2 text-xs font-semibold"
-                >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nameMarathi}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-800 mb-1">स्थान (Village)</label>
+                <label className="block font-bold text-gray-800 mb-1">स्थान (Village / Location)</label>
                 <select
                   name="locationId"
                   defaultValue={article.locationId || ""}
@@ -310,13 +326,13 @@ export default async function EditArticlePage({ params }: Props) {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-800 mb-1">बातमीदार (Reporter)</label>
+                <label className="block font-bold text-gray-800 mb-1">बातमीदार (Reporter / Author)</label>
                 <select
                   name="reporterId"
                   defaultValue={article.reporterId || ""}
                   className="w-full border border-gray-300 rounded p-2 text-xs"
                 >
-                  <option value="">न्यूज डेस्क</option>
+                  <option value="">न्यूज डेस्क (संपादकीय)</option>
                   {reporters.map((rep) => (
                     <option key={rep.id} value={rep.id}>
                       {rep.nameMarathi}
@@ -326,45 +342,120 @@ export default async function EditArticlePage({ params }: Props) {
               </div>
             </div>
 
-            {/* Priority & Breaking Flag */}
-            <div className="flex items-center gap-6 p-3 bg-red-50 rounded-xl border border-red-200">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="isBreaking"
-                  name="isBreaking"
-                  defaultChecked={article.isBreaking}
-                  value="true"
-                  className="w-4 h-4 accent-red-700"
-                />
-                <label htmlFor="isBreaking" className="font-bold text-red-900 cursor-pointer">
-                  🚨 ब्रेकिंग न्यूज (Breaking)
-                </label>
+            {/* 7. PRIORITY, BREAKING & VIDEO */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-red-50 rounded-xl border border-red-200">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isBreaking"
+                    name="isBreaking"
+                    defaultChecked={article.isBreaking}
+                    value="true"
+                    className="w-4 h-4 accent-red-700"
+                  />
+                  <label htmlFor="isBreaking" className="font-bold text-red-900 cursor-pointer">
+                    🚨 ब्रेकिंग न्यूज (Breaking)
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs">
+                  <label className="font-bold text-gray-800">प्राधान्य (0-5):</label>
+                  <input
+                    type="number"
+                    name="priority"
+                    defaultValue={article.priority}
+                    min="0"
+                    max="5"
+                    className="w-16 border border-gray-300 rounded p-1 text-center font-bold"
+                  />
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 text-xs">
-                <label className="font-bold text-gray-800">प्राधान्य (0-5):</label>
+              <div>
+                <label className="block font-bold text-gray-800 mb-1 text-xs">
+                  YouTube व्हिडिओ लिंक (YouTube URL)
+                </label>
                 <input
-                  type="number"
-                  name="priority"
-                  defaultValue={article.priority}
-                  min="0"
-                  max="5"
-                  className="w-16 border border-gray-300 rounded p-1 text-center font-bold"
+                  type="url"
+                  name="youtubeUrl"
+                  defaultValue={article.youtubeUrl || ""}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="w-full border border-gray-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-red-700 focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* Save Button */}
-            <div className="pt-4 border-t border-gray-200 flex justify-end">
+            {/* 8. TAGS / SEO */}
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-gray-700">
+                SEO व सोशल मेटाडेटा (Tags & SEO)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    SEO Title (मेटा शीर्षक)
+                  </label>
+                  <input
+                    type="text"
+                    name="seoTitle"
+                    defaultValue={article.seoTitle || ""}
+                    placeholder="गूगल शोध परिणामांसाठी शीर्षक..."
+                    className="w-full border border-gray-300 rounded p-2 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    SEO Keywords (कीवर्ड्स)
+                  </label>
+                  <input
+                    type="text"
+                    name="seoKeywords"
+                    defaultValue={article.seoKeywords || ""}
+                    placeholder="उदा. जामखेड, राजकारण, पाणीपुरवठा"
+                    className="w-full border border-gray-300 rounded p-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  SEO Description (मेटा वर्णन)
+                </label>
+                <input
+                  type="text"
+                  name="seoDescription"
+                  defaultValue={article.seoDescription || ""}
+                  placeholder="सर्च इंजिन निकालाखाली दिसणारा मजकूर..."
+                  className="w-full border border-gray-300 rounded p-2 text-xs"
+                />
+              </div>
+            </div>
+
+            {/* 9. SUBMIT ACTIONS */}
+            <div className="pt-4 border-t border-gray-200 flex flex-wrap items-center justify-end gap-3">
               <button
                 type="submit"
                 disabled={!canEdit}
-                className="flex items-center gap-1.5 bg-red-800 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-xl transition-colors shadow text-xs"
+                className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-white font-bold px-6 py-2.5 rounded-xl transition-colors shadow text-xs"
               >
                 <Save className="w-4 h-4" />
                 <span>बदल जतन करा (Save Changes)</span>
               </button>
+
+              {userIsEditor && article.status !== "PUBLISHED" && (
+                <button
+                  type="submit"
+                  name="status"
+                  value="PUBLISHED"
+                  disabled={!canEdit}
+                  className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white font-bold px-6 py-2.5 rounded-xl transition-colors shadow text-xs"
+                >
+                  <Globe className="w-4 h-4" />
+                  <span>थेट प्रसिद्ध करा (Publish Directly)</span>
+                </button>
+              )}
             </div>
           </form>
         </div>
