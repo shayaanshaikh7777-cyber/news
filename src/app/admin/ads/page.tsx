@@ -1,17 +1,26 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { createAdAction, toggleAdAction, deleteAdAction } from "@/actions/ad.actions";
-import { Megaphone, Plus, Trash2, Power, TrendingUp, MousePointer } from "lucide-react";
+import { Megaphone, Plus, Trash2, Power, TrendingUp, MousePointer, Database } from "lucide-react";
 
 export default async function AdminAdsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const ads = await prisma.advertisement.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  const dbReady = await isDatabaseAvailable();
+  let ads: any[] = [];
+
+  if (dbReady) {
+    try {
+      ads = await prisma.advertisement.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (e) {
+      console.error("[AdminAdsPage DB error]", e);
+    }
+  }
 
   const placements = [
     { key: "HEADER", label: "हेडर बॅनर (HEADER)" },
@@ -36,6 +45,16 @@ export default async function AdminAdsPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            जाहिराती व्यवस्थापित करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Create Ad Form (5 cols) */}

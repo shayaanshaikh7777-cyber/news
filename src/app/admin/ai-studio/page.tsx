@@ -17,6 +17,7 @@ import {
   ArrowRight,
   ShieldCheck,
 } from "lucide-react";
+import { createAIDraftArticleAction } from "@/actions/article.actions";
 
 export default function AINewsStudioPage() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export default function AINewsStudioPage() {
   const [language, setLanguage] = useState<"marathi" | "hindi" | "english">("marathi");
 
   const [loading, setLoading] = useState(false);
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
   const [activeAction, setActiveAction] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [copiedField, setCopiedField] = useState<string>("");
@@ -124,6 +126,29 @@ export default function AINewsStudioPage() {
     navigator.clipboard.writeText(text);
     setCopiedField(fieldName);
     setTimeout(() => setCopiedField(""), 2000);
+  };
+
+  const handleCreateDraft = async () => {
+    if (!result) return;
+    setIsCreatingDraft(true);
+    setError("");
+    try {
+      const res = await createAIDraftArticleAction({
+        headline: result.headline,
+        subheadline: result.subheadline,
+        summary: result.summary,
+        bodyMarkdown: result.body_markdown,
+      });
+      if (res.success && res.draftId) {
+        router.push(`/admin/articles/new?draftId=${res.draftId}`);
+      } else {
+        setError(res.error || "मसुदा तयार करताना त्रुटी आली.");
+      }
+    } catch (err: any) {
+      setError(err?.message || "मसुदा तयार करताना त्रुटी आली.");
+    } finally {
+      setIsCreatingDraft(false);
+    }
   };
 
   const aiActionButtons = [
@@ -306,18 +331,21 @@ export default function AINewsStudioPage() {
                 </div>
 
                 <button
-                  onClick={() => {
-                    const draftParams = new URLSearchParams({
-                      headline: result.headline,
-                      subheadline: result.subheadline,
-                      summary: result.summary,
-                    });
-                    router.push(`/admin/articles/new?${draftParams.toString()}`);
-                  }}
-                  className="bg-red-800 hover:bg-red-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs shadow flex items-center gap-1.5 transition-colors"
+                  onClick={handleCreateDraft}
+                  disabled={isCreatingDraft}
+                  className="bg-red-800 hover:bg-red-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs shadow flex items-center gap-1.5 transition-colors disabled:opacity-50"
                 >
-                  <span>या माहितीचा मसुदा तयार करा</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  {isCreatingDraft ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>मसुदा तयार होत आहे...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>या माहितीचा मसुदा तयार करा</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
                 </button>
               </div>
 

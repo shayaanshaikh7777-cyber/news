@@ -1,21 +1,30 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Users, CheckCircle, ExternalLink, Mail, MapPin } from "lucide-react";
+import { Users, CheckCircle, ExternalLink, Mail, MapPin, Database } from "lucide-react";
 
 export default async function AdminReportersPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const reporters = await prisma.reporterProfile.findMany({
-    include: {
-      user: true,
-      _count: { select: { articles: true } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const dbReady = await isDatabaseAvailable();
+  let reporters: any[] = [];
+
+  if (dbReady) {
+    try {
+      reporters = await prisma.reporterProfile.findMany({
+        include: {
+          user: true,
+          _count: { select: { articles: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+    } catch (e) {
+      console.error("[AdminReportersPage DB error]", e);
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -30,6 +39,16 @@ export default async function AdminReportersPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            बातमीदार माहिती पाहण्यासाठी किंवा अद्ययावत करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {reporters.map((rep) => (

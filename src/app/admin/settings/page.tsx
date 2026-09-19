@@ -1,11 +1,11 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { isSuperAdmin } from "@/lib/rbac";
 import { updateSiteSettingsAction } from "@/actions/admin.actions";
-import { Settings, Save, Sparkles, TrendingUp, Megaphone } from "lucide-react";
+import { Settings, Save, Sparkles, TrendingUp, Megaphone, Database } from "lucide-react";
 
 export default async function AdminSettingsPage() {
   const currentUser = await getCurrentUser();
@@ -13,9 +13,18 @@ export default async function AdminSettingsPage() {
     redirect("/admin");
   }
 
-  const settingsList = await prisma.siteSetting.findMany({
-    orderBy: { key: "asc" },
-  });
+  const dbReady = await isDatabaseAvailable();
+  let settingsList: any[] = [];
+
+  if (dbReady) {
+    try {
+      settingsList = await prisma.siteSetting.findMany({
+        orderBy: { key: "asc" },
+      });
+    } catch (e) {
+      console.error("[AdminSettingsPage DB error]", e);
+    }
+  }
 
   const settingsMap: Record<string, string> = {};
   settingsList.forEach((s) => {
@@ -35,6 +44,16 @@ export default async function AdminSettingsPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            सेटिंग्ज सेव्ह करण्यासाठी किंवा अद्ययावत करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       <form action={updateSiteSettingsAction} className="space-y-6 text-xs sm:text-sm">
         {/* General Site Branding */}

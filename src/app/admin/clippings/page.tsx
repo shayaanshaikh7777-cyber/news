@@ -1,20 +1,38 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Newspaper, Download, Share2, ExternalLink, Image as ImageIcon } from "lucide-react";
+import { Newspaper, Download, Share2, ExternalLink, Image as ImageIcon, Database } from "lucide-react";
 import { CLIPPING_FORMATS, ClippingFormat } from "@/lib/clipping-renderer";
+import { FALLBACK_ARTICLES } from "@/lib/fallback-data";
 
 export default async function AdminClippingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const articles = await prisma.article.findMany({
-    where: { status: "PUBLISHED" },
-    include: { location: true, category: true },
-    orderBy: { publishedAt: "desc" },
-    take: 15,
-  });
+  const dbReady = await isDatabaseAvailable();
+  let articles: any[] = [];
+
+  if (dbReady) {
+    try {
+      articles = await prisma.article.findMany({
+        where: { status: "PUBLISHED" },
+        include: { location: true, category: true },
+        orderBy: { publishedAt: "desc" },
+        take: 15,
+      });
+    } catch (e) {
+      console.error("[AdminClippingsPage DB error]", e);
+    }
+  }
+
+  if (articles.length === 0 && !dbReady) {
+    articles = FALLBACK_ARTICLES.map((a) => ({
+      ...a,
+      location: { village: "जामखेड" },
+      publishedAt: new Date(),
+    }));
+  }
 
   const formats: { key: ClippingFormat; label: string; desc: string }[] = [
     { key: "EPAPER", label: "ई-पेपर आवृत्ती (E-Paper)", desc: "1200×1600 दोन कॉलम वर्तमानपत्र लेआउट" },
@@ -38,6 +56,16 @@ export default async function AdminClippingsPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            प्रॉडक्शन डेटाबेसमधील लाईव्ह बातम्या लोड करण्यासाठी PostgreSQL DATABASE_URL आवश्यक आहे. (स्थानिक नमुना बातम्या दाखवत आहे).
+          </div>
+        </div>
+      )}
 
       {/* Available Formats Specs */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

@@ -1,16 +1,25 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { MessageSquare, Send, Users, ShieldCheck, CheckCircle2, Phone } from "lucide-react";
+import { MessageSquare, Send, Users, ShieldCheck, CheckCircle2, Phone, Database } from "lucide-react";
 
 export default async function AdminWhatsAppPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const subscribers = await prisma.whatsAppSubscriber.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  const dbReady = await isDatabaseAvailable();
+  let subscribers: any[] = [];
+
+  if (dbReady) {
+    try {
+      subscribers = await prisma.whatsAppSubscriber.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (e) {
+      console.error("[AdminWhatsAppPage DB error]", e);
+    }
+  }
 
   const activeCount = subscribers.filter((s) => s.status === "ACTIVE").length;
 
@@ -33,6 +42,16 @@ export default async function AdminWhatsAppPage() {
           <span>१००% Opt-In संमती आधारित</span>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            व्हॉट्सॲप सदस्य लोड करण्यासाठी किंवा व्यवस्थापित करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

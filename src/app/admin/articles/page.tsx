@@ -1,9 +1,8 @@
-import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, Search, Filter, Eye, Edit, Newspaper, ExternalLink } from "lucide-react";
+import { Plus, Search, Filter, Eye, Edit, Newspaper, ExternalLink, Database } from "lucide-react";
 
 interface Props {
   searchParams: Promise<{
@@ -31,18 +30,26 @@ export default async function AdminArticlesPage({ searchParams }: Props) {
     ];
   }
 
-  // If user is a reporter, they view all, but highlighted own articles
-  const articles = await prisma.article.findMany({
-    where: whereClause as any,
-    include: {
-      category: true,
-      location: true,
-      reporter: true,
-      createdBy: true,
-      _count: { select: { revisions: true } },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+  const dbReady = await isDatabaseAvailable();
+  let articles: any[] = [];
+
+  if (dbReady) {
+    try {
+      articles = await prisma.article.findMany({
+        where: whereClause as any,
+        include: {
+          category: true,
+          location: true,
+          reporter: true,
+          createdBy: true,
+          _count: { select: { revisions: true } },
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+    } catch (e) {
+      console.error("[AdminArticlesPage DB error]", e);
+    }
+  }
 
   const statuses = [
     { key: "ALL", label: "सर्व (All)" },
@@ -107,6 +114,16 @@ export default async function AdminArticlesPage({ searchParams }: Props) {
           </Link>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (PostgreSQL Offline / Unconfigured):</span>{" "}
+            प्रॉडक्शन डेटाबेसशी संपर्क होऊ शकला नाही. बातम्या व्यवस्थापित करण्यासाठी Vercel मध्ये वैध PostgreSQL DATABASE_URL कॉन्फिगर करा.
+          </div>
+        </div>
+      )}
 
       {/* Status Filter Bar */}
       <div className="flex items-center gap-1 overflow-x-auto pb-2 border-b border-gray-200 text-xs font-bold whitespace-nowrap">

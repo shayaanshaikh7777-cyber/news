@@ -1,33 +1,48 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { BarChart3, Eye, Users, Clock, Globe, Smartphone, Monitor } from "lucide-react";
+import { BarChart3, Eye, Users, Clock, Globe, Smartphone, Monitor, Database } from "lucide-react";
 
 export default async function AdminAnalyticsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const [articles, viewsCount, topArticles, locations] = await Promise.all([
-    prisma.article.aggregate({
-      _sum: { viewCount: true, uniqueVisitors: true },
-    }),
-    prisma.articleView.count(),
-    prisma.article.findMany({
-      where: { status: "PUBLISHED" },
-      orderBy: { viewCount: "desc" },
-      take: 8,
-      include: { category: true, location: true },
-    }),
-    prisma.location.findMany({
-      include: { _count: { select: { articles: true } } },
-      orderBy: { isHotspot: "desc" },
-      take: 6,
-    }),
-  ]);
+  const dbReady = await isDatabaseAvailable();
+  let totalViews = 0;
+  let uniqueVisitors = 0;
+  let viewsCount = 0;
+  let topArticles: any[] = [];
+  let locations: any[] = [];
 
-  const totalViews = articles._sum.viewCount || 0;
-  const uniqueVisitors = articles._sum.uniqueVisitors || 0;
+  if (dbReady) {
+    try {
+      const [articles, vCount, tArticles, locs] = await Promise.all([
+        prisma.article.aggregate({
+          _sum: { viewCount: true, uniqueVisitors: true },
+        }),
+        prisma.articleView.count(),
+        prisma.article.findMany({
+          where: { status: "PUBLISHED" },
+          orderBy: { viewCount: "desc" },
+          take: 8,
+          include: { category: true, location: true },
+        }),
+        prisma.location.findMany({
+          include: { _count: { select: { articles: true } } },
+          orderBy: { isHotspot: "desc" },
+          take: 6,
+        }),
+      ]);
+      totalViews = articles._sum.viewCount || 0;
+      uniqueVisitors = articles._sum.uniqueVisitors || 0;
+      viewsCount = vCount;
+      topArticles = tArticles;
+      locations = locs;
+    } catch (e) {
+      console.error("[AdminAnalyticsPage DB error]", e);
+    }
+  }
 
   // Mock traffic source distribution based on realistic local news patterns
   const trafficSources = [
@@ -56,6 +71,16 @@ export default async function AdminAnalyticsPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            प्रत्यक्ष वाचक आकडेवारी पाहण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

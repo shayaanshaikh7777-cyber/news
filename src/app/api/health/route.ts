@@ -1,41 +1,67 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseConfiguredCheck } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  let dbStatus = "ok";
+  const configured = isDatabaseConfiguredCheck();
 
-  try {
-    if (process.env.DATABASE_URL) {
-      // Fast ping check with 3-second timeout
-      await Promise.race([
-        prisma.$queryRaw`SELECT 1`,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("DB ping timeout")), 3000)
-        ),
-      ]);
-    } else {
-      dbStatus = "unconfigured (using fallback seed data)";
-    }
-  } catch (error) {
-    dbStatus = "degraded (fallback seed data active)";
+  if (!configured) {
+    return NextResponse.json(
+      {
+        status: "error",
+        database: "unavailable",
+        reason: "database_not_configured",
+        service: "awaaz-jamkhedcha",
+        timestamp: new Date().toISOString(),
+      },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
+    );
   }
 
-  return NextResponse.json(
-    {
-      status: "ok",
-      service: "awaaz-jamkhedcha",
-      timestamp: new Date().toISOString(),
-      database: dbStatus,
-      environment: process.env.NODE_ENV || "production",
-    },
-    {
-      status: 200,
-      headers: {
-        "Cache-Control": "no-store, max-age=0",
-      },
-    }
-  );
-}
+  try {
+    // Fast ping check with 3-second timeout
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("DB ping timeout")), 3000)
+      ),
+    ]);
 
+    return NextResponse.json(
+      {
+        status: "ok",
+        database: "connected",
+        service: "awaaz-jamkhedcha",
+        timestamp: new Date().toISOString(),
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
+    );
+  } catch {
+    return NextResponse.json(
+      {
+        status: "error",
+        database: "unavailable",
+        reason: "database_connection_failed",
+        service: "awaaz-jamkhedcha",
+        timestamp: new Date().toISOString(),
+      },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
+    );
+  }
+}

@@ -1,18 +1,36 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { createLocationAction } from "@/actions/admin.actions";
-import { MapPin, Plus } from "lucide-react";
+import { MapPin, Plus, Database } from "lucide-react";
 
 export default async function AdminLocationsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const locations = await prisma.location.findMany({
-    include: { _count: { select: { articles: true } } },
-    orderBy: { village: "asc" },
-  });
+  const dbReady = await isDatabaseAvailable();
+  let locations: any[] = [];
+
+  if (dbReady) {
+    try {
+      locations = await prisma.location.findMany({
+        include: { _count: { select: { articles: true } } },
+        orderBy: { village: "asc" },
+      });
+    } catch (e) {
+      console.error("[AdminLocationsPage DB error]", e);
+    }
+  }
+
+  if (locations.length === 0 && !dbReady) {
+    locations = [
+      { id: "loc-jamkhed", district: "अहिल्यानगर", taluka: "जामखेड", village: "जामखेड शहर", _count: { articles: 0 } },
+      { id: "loc-kharda", district: "अहिल्यानगर", taluka: "जामखेड", village: "खर्डा", _count: { articles: 0 } },
+      { id: "loc-sakat", district: "अहिल्यानगर", taluka: "जामखेड", village: "साकत", _count: { articles: 0 } },
+      { id: "loc-nannaj", district: "अहिल्यानगर", taluka: "जामखेड", village: "नान्नज", _count: { articles: 0 } },
+    ];
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -27,6 +45,16 @@ export default async function AdminLocationsPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            गावे/स्थाने सेव्ह करण्यासाठी किंवा अद्ययावत करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Create Location Form */}

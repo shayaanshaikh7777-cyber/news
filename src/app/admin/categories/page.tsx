@@ -1,18 +1,37 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { createCategoryAction } from "@/actions/admin.actions";
-import { Layers, Plus } from "lucide-react";
+import { Layers, Plus, Database } from "lucide-react";
+import { FALLBACK_CATEGORIES } from "@/lib/fallback-data";
 
 export default async function AdminCategoriesPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const categories = await prisma.category.findMany({
-    include: { _count: { select: { articles: true } } },
-    orderBy: { sortOrder: "asc" },
-  });
+  const dbReady = await isDatabaseAvailable();
+  let categories: any[] = [];
+
+  if (dbReady) {
+    try {
+      categories = await prisma.category.findMany({
+        include: { _count: { select: { articles: true } } },
+        orderBy: { sortOrder: "asc" },
+      });
+    } catch (e) {
+      console.error("[AdminCategoriesPage DB error]", e);
+    }
+  }
+
+  if (categories.length === 0 && !dbReady) {
+    categories = FALLBACK_CATEGORIES.map((c, i) => ({
+      ...c,
+      sortOrder: i + 1,
+      isActive: true,
+      _count: { articles: 0 },
+    }));
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -27,6 +46,16 @@ export default async function AdminCategoriesPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            विभाग सेव्ह करण्यासाठी किंवा अद्ययावत करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Create Category Form */}

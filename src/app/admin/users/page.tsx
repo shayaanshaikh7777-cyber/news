@@ -1,10 +1,10 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { isSuperAdmin, Role } from "@/lib/rbac";
 import { updateUserRoleAction } from "@/actions/user.actions";
-import { Shield, User, CheckCircle2 } from "lucide-react";
+import { Shield, User, CheckCircle2, Database } from "lucide-react";
 
 export default async function AdminUsersPage() {
   const currentUser = await getCurrentUser();
@@ -12,10 +12,34 @@ export default async function AdminUsersPage() {
     redirect("/admin");
   }
 
-  const users = await prisma.user.findMany({
-    include: { reporterProfile: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const dbReady = await isDatabaseAvailable();
+  let users: any[] = [];
+
+  if (dbReady) {
+    try {
+      users = await prisma.user.findMany({
+        include: { reporterProfile: true },
+        orderBy: { createdAt: "asc" },
+      });
+    } catch (e) {
+      console.error("[AdminUsersPage DB error]", e);
+    }
+  }
+
+  if (users.length === 0) {
+    users = [
+      {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        phone: null,
+        role: currentUser.role,
+        isActive: true,
+        createdAt: new Date(),
+        reporterProfile: null,
+      },
+    ];
+  }
 
   const rolesList: { role: Role; label: string }[] = [
     { role: "SUPER_ADMIN", label: "सुपर ॲडमीन (Super Admin)" },
@@ -37,6 +61,16 @@ export default async function AdminUsersPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            वापरकर्ते व्यवस्थापित करण्यासाठी व बदल सेव्ह करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">

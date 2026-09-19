@@ -1,20 +1,28 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Image as ImageIcon, Upload, ExternalLink, Check, Copy } from "lucide-react";
+import { Image as ImageIcon, Upload, ExternalLink, Check, Copy, Database } from "lucide-react";
 
 export default async function AdminMediaPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  // Fetch articles that have featured images or gallery images
-  const articlesWithImages = await prisma.article.findMany({
-    where: { featuredImage: { not: null } },
-    select: { id: true, headline: true, featuredImage: true, publishedAt: true },
-    orderBy: { publishedAt: "desc" },
-    take: 20,
-  });
+  const dbReady = await isDatabaseAvailable();
+  let articlesWithImages: any[] = [];
+
+  if (dbReady) {
+    try {
+      articlesWithImages = await prisma.article.findMany({
+        where: { featuredImage: { not: null } },
+        select: { id: true, headline: true, featuredImage: true, publishedAt: true },
+        orderBy: { publishedAt: "desc" },
+        take: 20,
+      });
+    } catch (e) {
+      console.error("[AdminMediaPage DB error]", e);
+    }
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -29,6 +37,16 @@ export default async function AdminMediaPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            अपलोड केलेले मीडिया लोड करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       {/* Cloud Object Storage Status Bar */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex flex-wrap items-center justify-between gap-4 text-xs">

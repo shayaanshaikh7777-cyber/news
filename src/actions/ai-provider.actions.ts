@@ -40,44 +40,49 @@ async function verifySuperAdmin() {
  * Lists all configured AI providers with masked API keys.
  */
 export async function getAIProvidersAction(): Promise<AIProviderDTO[]> {
-  await verifySuperAdmin();
+  try {
+    await verifySuperAdmin();
 
-  if (!(await isDatabaseAvailable())) {
-    return [];
-  }
-
-  const providers = await prisma.aIProvider.findMany({
-    orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
-  });
-
-  return providers.map((p) => {
-    let masked = "••••••••";
-    try {
-      const plain = decryptApiKey(p.apiKeyEncrypted);
-      masked = maskApiKey(plain);
-    } catch {
-      masked = "••••••••";
+    if (!(await isDatabaseAvailable())) {
+      return [];
     }
 
-    return {
-      id: p.id,
-      name: p.name,
-      providerType: p.providerType as AIProviderType,
-      model: p.model,
-      baseUrl: p.baseUrl,
-      maskedKey: masked,
-      isActive: p.isActive,
-      isDefault: p.isDefault,
-      temperature: p.temperature,
-      maxTokens: p.maxTokens,
-      timeoutMs: p.timeoutMs,
-      lastTestedAt: p.lastTestedAt ? p.lastTestedAt.toISOString() : null,
-      lastTestStatus: p.lastTestStatus,
-      lastTestError: p.lastTestError,
-      createdAt: p.createdAt.toISOString(),
-      updatedAt: p.updatedAt.toISOString(),
-    };
-  });
+    const providers = await prisma.aIProvider.findMany({
+      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+    });
+
+    return providers.map((p) => {
+      let masked = "••••••••";
+      try {
+        const plain = decryptApiKey(p.apiKeyEncrypted);
+        masked = maskApiKey(plain);
+      } catch {
+        masked = "••••••••";
+      }
+
+      return {
+        id: p.id,
+        name: p.name,
+        providerType: p.providerType as AIProviderType,
+        model: p.model,
+        baseUrl: p.baseUrl,
+        maskedKey: masked,
+        isActive: p.isActive,
+        isDefault: p.isDefault,
+        temperature: p.temperature,
+        maxTokens: p.maxTokens,
+        timeoutMs: p.timeoutMs,
+        lastTestedAt: p.lastTestedAt ? p.lastTestedAt.toISOString() : null,
+        lastTestStatus: p.lastTestStatus,
+        lastTestError: p.lastTestError,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+      };
+    });
+  } catch (error) {
+    console.error("[getAIProvidersAction error]", error);
+    return [];
+  }
 }
 
 /**
@@ -362,9 +367,35 @@ export async function testAIProviderAction(providerId: string): Promise<AITestRe
  * Aggregates AI token usage statistics.
  */
 export async function getAIUsageStatsAction() {
-  await verifySuperAdmin();
+  try {
+    await verifySuperAdmin();
 
-  if (!(await isDatabaseAvailable())) {
+    if (!(await isDatabaseAvailable())) {
+      return {
+        totalRequests: 0,
+        totalTokens: 0,
+        successfulRequests: 0,
+        fallbackRequests: 0,
+      };
+    }
+
+    const [total, success, fallback, tokenAggregation] = await Promise.all([
+      prisma.aIUsageLog.count(),
+      prisma.aIUsageLog.count({ where: { status: "SUCCESS" } }),
+      prisma.aIUsageLog.count({ where: { status: "FALLBACK" } }),
+      prisma.aIUsageLog.aggregate({
+        _sum: { totalTokens: true },
+      }),
+    ]);
+
+    return {
+      totalRequests: total,
+      totalTokens: tokenAggregation._sum.totalTokens || 0,
+      successfulRequests: success,
+      fallbackRequests: fallback,
+    };
+  } catch (error) {
+    console.error("[getAIUsageStatsAction error]", error);
     return {
       totalRequests: 0,
       totalTokens: 0,
@@ -372,21 +403,5 @@ export async function getAIUsageStatsAction() {
       fallbackRequests: 0,
     };
   }
-
-  const [total, success, fallback, tokenAggregation] = await Promise.all([
-    prisma.aIUsageLog.count(),
-    prisma.aIUsageLog.count({ where: { status: "SUCCESS" } }),
-    prisma.aIUsageLog.count({ where: { status: "FALLBACK" } }),
-    prisma.aIUsageLog.aggregate({
-      _sum: { totalTokens: true },
-    }),
-  ]);
-
-  return {
-    totalRequests: total,
-    totalTokens: tokenAggregation._sum.totalTokens || 0,
-    successfulRequests: success,
-    fallbackRequests: fallback,
-  };
 }
 

@@ -1,5 +1,5 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import {
@@ -7,15 +7,24 @@ import {
   toggleBreakingNewsAction,
   deleteBreakingNewsAction,
 } from "@/actions/breaking.actions";
-import { AlertCircle, Plus, Trash2, Power, Clock, ExternalLink } from "lucide-react";
+import { AlertCircle, Plus, Trash2, Power, Clock, ExternalLink, Database } from "lucide-react";
 
 export default async function AdminBreakingNewsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const breakingList = await prisma.breakingNews.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  const dbReady = await isDatabaseAvailable();
+  let breakingList: any[] = [];
+
+  if (dbReady) {
+    try {
+      breakingList = await prisma.breakingNews.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (e) {
+      console.error("[AdminBreakingNewsPage DB error]", e);
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -31,6 +40,16 @@ export default async function AdminBreakingNewsPage() {
           </p>
         </div>
       </div>
+
+      {!dbReady && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
+          <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
+          <div>
+            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
+            ब्रेकिंग न्यूज अद्ययावत करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Create Breaking News Form (5 cols) */}

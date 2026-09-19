@@ -1,20 +1,81 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { createArticleAction } from "@/actions/article.actions";
 import Link from "next/link";
-import { Sparkles, ArrowLeft, Save, Send } from "lucide-react";
+import { Sparkles, ArrowLeft, Save, Send, FileEdit } from "lucide-react";
 
-export default async function NewArticlePage() {
+interface Props {
+  searchParams?: Promise<{
+    draftId?: string;
+    headline?: string;
+    subheadline?: string;
+    summary?: string;
+  }>;
+}
+
+export const dynamic = "force-dynamic";
+
+export default async function NewArticlePage({ searchParams }: Props) {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const [categories, locations, reporters] = await Promise.all([
-    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.location.findMany({ orderBy: { village: "asc" } }),
-    prisma.reporterProfile.findMany({ orderBy: { nameMarathi: "asc" } }),
-  ]);
+  const resolvedParams = searchParams ? await searchParams : {};
+  const dbUp = await isDatabaseAvailable();
+
+  let categories: any[] = [];
+  let locations: any[] = [];
+  let reporters: any[] = [];
+  let existingDraft: any = null;
+
+  if (dbUp) {
+    try {
+      const [cats, locs, reps] = await Promise.all([
+        prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+        prisma.location.findMany({ orderBy: { village: "asc" } }),
+        prisma.reporterProfile.findMany({ orderBy: { nameMarathi: "asc" } }),
+      ]);
+      categories = cats;
+      locations = locs;
+      reporters = reps;
+
+      if (resolvedParams.draftId) {
+        existingDraft = await prisma.article.findUnique({
+          where: { id: resolvedParams.draftId },
+        });
+      }
+    } catch (e) {
+      console.error("[NewArticlePage DB query error]", e);
+    }
+  }
+
+  // Fallback defaults if tables are empty
+  if (categories.length === 0) {
+    categories = [
+      { id: "cat-jamkhed", name: "Jamkhed", nameMarathi: "जामखेड विशेष" },
+      { id: "cat-politics", name: "Politics", nameMarathi: "राजकारण" },
+      { id: "cat-agriculture", name: "Agriculture", nameMarathi: "शेती व हवामान" },
+      { id: "cat-crime", name: "Crime", nameMarathi: "गुन्हेगारी" },
+      { id: "cat-sports", name: "Sports", nameMarathi: "क्रीडा" },
+    ];
+  }
+
+  // Prepopulate values: database draft takes precedence over URL query parameters
+  const initialHeadline = existingDraft?.headline || resolvedParams.headline || "";
+  const initialSubheadline = existingDraft?.subheadline || resolvedParams.subheadline || "";
+  const initialSummary = existingDraft?.summary || resolvedParams.summary || "";
+  const initialBody = existingDraft?.bodyMarkdown || "";
+  const initialCategoryId = existingDraft?.categoryId || categories[0]?.id || "";
+  const initialLocationId = existingDraft?.locationId || "";
+  const initialFeaturedImage = existingDraft?.featuredImage || "";
+  const initialYoutubeUrl = existingDraft?.youtubeUrl || "";
+  const initialSlug = existingDraft?.slug || "";
+  const initialPriority = existingDraft?.priority ?? 1;
+  const initialIsBreaking = existingDraft?.isBreaking ?? false;
+  const initialSeoTitle = existingDraft?.seoTitle || "";
+  const initialSeoDescription = existingDraft?.seoDescription || "";
+  const initialReporterId = existingDraft?.reporterId || user.reporterProfileId || "";
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -37,10 +98,24 @@ export default async function NewArticlePage() {
         </Link>
       </div>
 
+      {existingDraft && (
+        <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between text-xs text-purple-900">
+          <div className="flex items-center gap-2">
+            <FileEdit className="w-4 h-4 text-purple-700 flex-shrink-0" />
+            <span className="font-bold">
+              AI स्टुडिओमधून सेव्ह केलेला मसुदा लोड केला आहे (Draft ID: {existingDraft.id.slice(0, 8)}...)
+            </span>
+          </div>
+          <span className="bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded">
+            DRAFT ACTIVE
+          </span>
+        </div>
+      )}
+
       <div className="bg-white p-6 sm:p-8 rounded-2xl border border-gray-200 shadow-sm">
         <div className="pb-4 border-b border-gray-200 mb-6">
           <h1 className="text-2xl font-black font-headline text-gray-950">
-            नवीन बातमी संकलन (New Story Draft)
+            {existingDraft ? "मसुदा संपादन (Edit Story Draft)" : "नवीन बातमी संकलन (New Story Draft)"}
           </h1>
           <p className="text-xs text-gray-500 mt-1">
             जामखेड न्यूजरूम मार्गदर्शक तत्त्वे व वस्तुस्थिती पडताळणीनुसार माहिती भरा.
@@ -48,6 +123,10 @@ export default async function NewArticlePage() {
         </div>
 
         <form action={createArticleAction} className="space-y-6 text-xs sm:text-sm">
+          {existingDraft && (
+            <input type="hidden" name="draftId" value={existingDraft.id} />
+          )}
+
           {/* Headline */}
           <div>
             <label className="block font-bold text-gray-900 mb-1">
@@ -57,6 +136,7 @@ export default async function NewArticlePage() {
               type="text"
               name="headline"
               required
+              defaultValue={initialHeadline}
               placeholder="उदा. जामखेड शहराच्या पाणीपुरवठ्यासाठी नवीन जलवाहिनीचे काम सुरू"
               className="w-full text-base font-bold border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none"
             />
@@ -70,6 +150,7 @@ export default async function NewArticlePage() {
             <input
               type="text"
               name="subheadline"
+              defaultValue={initialSubheadline}
               placeholder="उदा. खर्डा चौक ते बीड नाका दरम्यान पाईपलाईन; पुढील १५ दिवसांत काम पूर्ण"
               className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
             />
@@ -83,6 +164,7 @@ export default async function NewArticlePage() {
             <textarea
               name="summary"
               rows={2}
+              defaultValue={initialSummary}
               placeholder="२ ते ३ वाक्यांत महत्त्वाचा निष्कर्ष किंवा बातमीचा गाभा..."
               className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
             />
@@ -102,6 +184,7 @@ export default async function NewArticlePage() {
               name="bodyMarkdown"
               required
               rows={12}
+              defaultValue={initialBody}
               placeholder={`### मुख्य बातमी\n\nजामखेड (विशेष प्रतिनिधी): ...\n\n#### महत्त्वाचे मुद्दे:\n- पहिला मुद्दा\n- दुसरा मुद्दा\n\n> "प्रशासनाकडून आवश्यक सर्व मदत दिली जाईल." - तहसीलदार`}
               className="w-full font-mono text-xs sm:text-sm border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
             />
@@ -116,6 +199,7 @@ export default async function NewArticlePage() {
               <input
                 type="url"
                 name="featuredImage"
+                defaultValue={initialFeaturedImage}
                 placeholder="https://images.unsplash.com/..."
                 className="w-full border border-gray-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-red-700 focus:outline-none"
               />
@@ -128,6 +212,7 @@ export default async function NewArticlePage() {
               <input
                 type="url"
                 name="youtubeUrl"
+                defaultValue={initialYoutubeUrl}
                 placeholder="https://www.youtube.com/watch?v=..."
                 className="w-full border border-gray-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-red-700 focus:outline-none"
               />
@@ -143,6 +228,7 @@ export default async function NewArticlePage() {
               <select
                 name="categoryId"
                 required
+                defaultValue={initialCategoryId}
                 className="w-full border border-gray-300 rounded-lg p-2.5 text-xs font-semibold focus:ring-2 focus:ring-red-700 focus:outline-none"
               >
                 {categories.map((c) => (
@@ -159,6 +245,7 @@ export default async function NewArticlePage() {
               </label>
               <select
                 name="locationId"
+                defaultValue={initialLocationId}
                 className="w-full border border-gray-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-red-700 focus:outline-none"
               >
                 <option value="">-- स्थान निवडा --</option>
@@ -176,7 +263,7 @@ export default async function NewArticlePage() {
               </label>
               <select
                 name="reporterId"
-                defaultValue={user.reporterProfileId || ""}
+                defaultValue={initialReporterId}
                 className="w-full border border-gray-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-red-700 focus:outline-none"
               >
                 <option value="">न्यूज डेस्क (संपादकीय)</option>
@@ -197,6 +284,7 @@ export default async function NewArticlePage() {
                 id="isBreaking"
                 name="isBreaking"
                 value="true"
+                defaultChecked={initialIsBreaking}
                 className="w-4 h-4 accent-red-700"
               />
               <label htmlFor="isBreaking" className="font-black text-red-900 cursor-pointer">
@@ -211,7 +299,7 @@ export default async function NewArticlePage() {
                 name="priority"
                 min="0"
                 max="5"
-                defaultValue="1"
+                defaultValue={initialPriority}
                 className="w-16 border border-gray-300 rounded p-1 text-center font-bold"
               />
             </div>
@@ -230,6 +318,7 @@ export default async function NewArticlePage() {
                 <input
                   type="text"
                   name="seoTitle"
+                  defaultValue={initialSeoTitle}
                   placeholder="गूगल शोध परिणामांसाठी शीर्षक..."
                   className="w-full border border-gray-300 rounded p-2 text-xs"
                 />
@@ -242,6 +331,7 @@ export default async function NewArticlePage() {
                 <input
                   type="text"
                   name="slug"
+                  defaultValue={initialSlug}
                   placeholder="उदा. jamkhed-water-project-update"
                   className="w-full border border-gray-300 rounded p-2 text-xs font-mono"
                 />
@@ -255,6 +345,7 @@ export default async function NewArticlePage() {
               <input
                 type="text"
                 name="seoDescription"
+                defaultValue={initialSeoDescription}
                 placeholder="सर्च इंजिन निकालाखाली दिसणारा मजकूर..."
                 className="w-full border border-gray-300 rounded p-2 text-xs"
               />
@@ -288,4 +379,3 @@ export default async function NewArticlePage() {
     </div>
   );
 }
-

@@ -1,5 +1,5 @@
 import React from "react";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import {
@@ -20,6 +20,7 @@ import {
   Globe,
   Newspaper,
   AlertTriangle,
+  Database,
 } from "lucide-react";
 import { canEditArticle, isEditor, isSuperAdmin } from "@/lib/rbac";
 import { ALLOWED_TRANSITIONS, ArticleStatus } from "@/lib/workflow";
@@ -31,6 +32,21 @@ interface Props {
 export default async function EditArticlePage({ params }: Props) {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
+
+  if (!(await isDatabaseAvailable())) {
+    return (
+      <div className="max-w-4xl mx-auto p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-4">
+        <Database className="w-12 h-12 text-amber-500 mx-auto" />
+        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">डेटाबेस उपलब्ध नाही (Database Offline)</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          बातमी संपादन करण्यासाठी किंवा पाहण्यासाठी प्रॉडक्शन PostgreSQL डेटाबेसशी संपर्क आवश्यक आहे.
+        </p>
+        <Link href="/admin/articles" className="inline-flex items-center gap-2 px-4 py-2 bg-red-800 text-white rounded-xl text-sm font-medium">
+          <ArrowLeft className="w-4 h-4" /> बातम्यांच्या यादीकडे परत
+        </Link>
+      </div>
+    );
+  }
 
   const { id } = await params;
 

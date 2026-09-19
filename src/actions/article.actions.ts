@@ -1,6 +1,6 @@
 "use server";
 
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { isReporter, isEditor, isSuperAdmin, canEditArticle } from "@/lib/rbac";
 import { transitionArticleStatus, ArticleStatus } from "@/lib/workflow";
@@ -9,10 +9,83 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { recordAuditLog } from "@/lib/audit";
 
+export async function createAIDraftArticleAction(data: {
+  headline: string;
+  subheadline?: string;
+  summary?: string;
+  bodyMarkdown: string;
+  categoryId?: string;
+  locationId?: string;
+}): Promise<{ success: boolean; draftId?: string; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user || !isReporter(user.role)) {
+    return { success: false, error: "अनधिकृत वापर. कृपया लॉगिन करा." };
+  }
+
+  try {
+    if (!(await isDatabaseAvailable())) {
+      return { success: false, error: "डेटाबेस सध्या उपलब्ध नाही (Database Offline)." };
+    }
+
+    // Resolve categoryId if not provided (fallback to first active category)
+    let catId = data.categoryId;
+    if (!catId) {
+      const defaultCategory = await prisma.category.findFirst({
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+      });
+      catId = defaultCategory?.id;
+    }
+
+    if (!catId) {
+      return { success: false, error: "कृपया बातमीसाठी किमान एक विभाग (Category) निवडा." };
+    }
+
+    const cleanSlug = `awaaz-ai-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
+    const wordCount = (data.bodyMarkdown || "").split(/\s+/).length;
+    const readingTime = Math.max(1, Math.round(wordCount / 150));
+
+    const draft = await prisma.article.create({
+      data: {
+        headline: data.headline.trim(),
+        subheadline: data.subheadline?.trim() || null,
+        summary: data.summary?.trim() || null,
+        bodyMarkdown: data.bodyMarkdown?.trim() || "",
+        categoryId: catId,
+        locationId: data.locationId || null,
+        createdById: user.id,
+        status: "DRAFT",
+        slug: cleanSlug,
+        readingTimeMinutes: readingTime,
+        priority: 0,
+        isBreaking: false,
+      },
+    });
+
+    await recordAuditLog({
+      userId: user.id,
+      action: "ARTICLE_CREATED",
+      entity: "Article",
+      entityId: draft.id,
+      details: { headline: draft.headline, source: "AI_STUDIO" },
+    });
+
+    revalidatePath("/admin/articles");
+    return { success: true, draftId: draft.id };
+  } catch (err: any) {
+    console.error("[createAIDraftArticleAction error]", err);
+    return { success: false, error: err?.message || "मसुदा सेव्ह करताना त्रुटी आली." };
+  }
+}
+
 export async function createArticleAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user || !isReporter(user.role)) {
     redirect("/admin/login");
+  }
+
+  if (!(await isDatabaseAvailable())) {
+    throw new Error("डेटाबेस उपलब्ध नाही.");
   }
 
   const raw = {
@@ -48,21 +121,41 @@ export async function createArticleAction(formData: FormData): Promise<void> {
   const wordCount = parsed.data.bodyMarkdown.split(/\s+/).length;
   const readingTime = Math.max(1, Math.round(wordCount / 150));
 
-  const article = await prisma.article.create({
-    data: {
-      ...parsed.data,
-      slug: cleanSlug,
-      readingTimeMinutes: readingTime,
-      createdById: user.id,
-      submittedById: parsed.data.status === "SUBMITTED" ? user.id : null,
-    },
-  });
+  const draftId = formData.get("draftId") as string;
+  let article: any = null;
+
+  if (draftId) {
+    const existing = await prisma.article.findUnique({ where: { id: draftId } });
+    if (existing && canEditArticle(user, existing)) {
+      article = await prisma.article.update({
+        where: { id: draftId },
+        data: {
+          ...parsed.data,
+          slug: parsed.data.slug?.trim() || existing.slug,
+          readingTimeMinutes: readingTime,
+          submittedById: parsed.data.status === "SUBMITTED" ? user.id : existing.submittedById,
+        },
+      });
+    }
+  }
+
+  if (!article) {
+    article = await prisma.article.create({
+      data: {
+        ...parsed.data,
+        slug: cleanSlug,
+        readingTimeMinutes: readingTime,
+        createdById: user.id,
+        submittedById: parsed.data.status === "SUBMITTED" ? user.id : null,
+      },
+    });
+  }
 
   await prisma.articleRevision.create({
     data: {
       articleId: article.id,
       changedById: user.id,
-      changeSummary: "नवीन बातमी ड्राफ्ट तयार केली.",
+      changeSummary: draftId ? "AI मसुदा अद्ययावत केला." : "नवीन बातमी ड्राफ्ट तयार केली.",
       diffData: JSON.stringify(article),
     },
   });
