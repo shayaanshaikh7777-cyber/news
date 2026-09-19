@@ -307,6 +307,12 @@ export function getLastDatabaseError(): {
   } else if (lastDbError && lastDbError.includes("Authentication failed")) {
     hint =
       "डेटाबेस ऑथेंटिकेशन अयशस्वी झाले. कृपया Supabase Dashboard मधून अचूक क्रेडेंशियल्स तपासा आणि पासवर्डमधील विशेष चिन्हे URL-encode करा.";
+  } else if (
+    lastDbErrorCode === "P2021" ||
+    (lastDbError && lastDbError.includes("does not exist in the current database"))
+  ) {
+    hint =
+      "डेटाबेस सारण्या (Tables) अद्याप मायग्रेट झालेल्या नाहीत. ॲडमिन सेटिंग्जमधून 'स्कीमा सिंक करा' चालवा किंवा Vercel वर 'Redeploy' करा.";
   }
 
   return {
@@ -314,6 +320,16 @@ export function getLastDatabaseError(): {
     code: lastDbErrorCode,
     hint,
   };
+}
+
+/**
+ * Checks if an error is due to a missing table in PostgreSQL (Prisma P2021).
+ */
+export function isTableNotFoundError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = typeof err === "string" ? err : (err as any)?.message || "";
+  const code = (err as any)?.code || "";
+  return code === "P2021" || msg.includes("does not exist in the current database");
 }
 
 /**

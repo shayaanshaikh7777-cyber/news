@@ -35,76 +35,12 @@ export interface AIProviderActionResult {
   isActive?: boolean;
 }
 
-let tablesChecked = false;
-
 /**
- * Ensures AIProvider and AIUsageLog tables exist in PostgreSQL.
- * Self-heals if database was newly connected without full DDL execution.
+ * Schema management is handled through Prisma migrations and syncDatabaseSchemaAction.
+ * Kept as safe no-op for backwards compatibility.
  */
 export async function ensureAITablesExist(): Promise<void> {
-  if (tablesChecked) return;
-  const ddlStatements = [
-    `CREATE TABLE IF NOT EXISTS "AIProvider" (
-      "id" TEXT NOT NULL PRIMARY KEY,
-      "name" TEXT NOT NULL,
-      "providerType" TEXT NOT NULL,
-      "apiKeyEncrypted" TEXT NOT NULL,
-      "model" TEXT NOT NULL,
-      "baseUrl" TEXT,
-      "isActive" BOOLEAN NOT NULL DEFAULT true,
-      "isDefault" BOOLEAN NOT NULL DEFAULT false,
-      "temperature" DOUBLE PRECISION NOT NULL DEFAULT 0.2,
-      "maxTokens" INTEGER NOT NULL DEFAULT 2048,
-      "timeoutMs" INTEGER NOT NULL DEFAULT 30000,
-      "lastTestedAt" TIMESTAMP(3),
-      "lastTestStatus" TEXT,
-      "lastTestError" TEXT,
-      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE INDEX IF NOT EXISTS "AIProvider_isActive_idx" ON "AIProvider"("isActive")`,
-    `CREATE INDEX IF NOT EXISTS "AIProvider_isDefault_idx" ON "AIProvider"("isDefault")`,
-    `CREATE INDEX IF NOT EXISTS "AIProvider_providerType_idx" ON "AIProvider"("providerType")`,
-    `CREATE TABLE IF NOT EXISTS "AIUsageLog" (
-      "id" TEXT NOT NULL PRIMARY KEY,
-      "providerId" TEXT,
-      "providerType" TEXT NOT NULL,
-      "model" TEXT NOT NULL,
-      "action" TEXT NOT NULL,
-      "promptTokens" INTEGER NOT NULL DEFAULT 0,
-      "responseTokens" INTEGER NOT NULL DEFAULT 0,
-      "totalTokens" INTEGER NOT NULL DEFAULT 0,
-      "durationMs" INTEGER NOT NULL DEFAULT 0,
-      "status" TEXT NOT NULL,
-      "errorMessage" TEXT,
-      "userId" TEXT,
-      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE INDEX IF NOT EXISTS "AIUsageLog_providerId_idx" ON "AIUsageLog"("providerId")`,
-    `CREATE INDEX IF NOT EXISTS "AIUsageLog_createdAt_idx" ON "AIUsageLog"("createdAt")`,
-    `CREATE TABLE IF NOT EXISTS "AuditLog" (
-      "id" TEXT NOT NULL PRIMARY KEY,
-      "userId" TEXT,
-      "action" TEXT NOT NULL,
-      "entity" TEXT NOT NULL,
-      "entityId" TEXT,
-      "details" TEXT,
-      "ipAddress" TEXT,
-      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE INDEX IF NOT EXISTS "AuditLog_entity_idx" ON "AuditLog"("entity")`,
-    `CREATE INDEX IF NOT EXISTS "AuditLog_action_idx" ON "AuditLog"("action")`,
-    `CREATE INDEX IF NOT EXISTS "AuditLog_createdAt_idx" ON "AuditLog"("createdAt")`,
-  ];
-
-  for (const sql of ddlStatements) {
-    try {
-      await prisma.$executeRawUnsafe(sql);
-    } catch {
-      // Non-fatal if index or table already exists or permission restricted
-    }
-  }
-  tablesChecked = true;
+  return;
 }
 
 async function verifySuperAdmin(): Promise<SessionUser | null> {

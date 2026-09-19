@@ -21,12 +21,16 @@ export async function createCategoryAction(formData: FormData): Promise<void> {
     return;
   }
 
-  await prisma.category.create({
-    data: { name, nameMarathi, slug: slug.toLowerCase().trim(), description },
-  });
+  try {
+    await prisma.category.create({
+      data: { name, nameMarathi, slug: slug.toLowerCase().trim(), description },
+    });
 
-  revalidatePath("/");
-  revalidatePath("/admin/categories");
+    revalidatePath("/");
+    revalidatePath("/admin/categories");
+  } catch (err: any) {
+    console.error("[createCategoryAction error]:", err?.message);
+  }
 }
 
 export async function createLocationAction(formData: FormData): Promise<void> {
@@ -45,18 +49,22 @@ export async function createLocationAction(formData: FormData): Promise<void> {
     return;
   }
 
-  await prisma.location.create({
-    data: {
-      district,
-      taluka,
-      village,
-      slug: slug.toLowerCase().trim(),
-      isHotspot,
-    },
-  });
+  try {
+    await prisma.location.create({
+      data: {
+        district,
+        taluka,
+        village,
+        slug: slug.toLowerCase().trim(),
+        isHotspot,
+      },
+    });
 
-  revalidatePath("/");
-  revalidatePath("/admin/locations");
+    revalidatePath("/");
+    revalidatePath("/admin/locations");
+  } catch (err: any) {
+    console.error("[createLocationAction error]:", err?.message);
+  }
 }
 
 export async function updateSiteSettingsAction(formData: FormData): Promise<void> {
@@ -67,23 +75,27 @@ export async function updateSiteSettingsAction(formData: FormData): Promise<void
 
   const entries = Array.from(formData.entries());
 
-  for (const [key, value] of entries) {
-    if (typeof value === "string") {
-      await prisma.siteSetting.upsert({
-        where: { key },
-        update: { value },
-        create: { key, value },
-      });
+  try {
+    for (const [key, value] of entries) {
+      if (typeof value === "string") {
+        await prisma.siteSetting.upsert({
+          where: { key },
+          update: { value },
+          create: { key, value },
+        });
+      }
     }
+
+    await recordAuditLog({
+      userId: user.id,
+      action: "SITE_SETTINGS_UPDATED",
+      entity: "SiteSetting",
+      details: { updatedKeys: entries.map(([k]) => k) },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/admin/settings");
+  } catch (err: any) {
+    console.error("[updateSiteSettingsAction error]:", err?.message);
   }
-
-  await recordAuditLog({
-    userId: user.id,
-    action: "SITE_SETTINGS_UPDATED",
-    entity: "SiteSetting",
-    details: { updatedKeys: entries.map(([k]) => k) },
-  });
-
-  revalidatePath("/");
-  revalidatePath("/admin/settings");
 }

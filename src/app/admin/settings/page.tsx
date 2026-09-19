@@ -6,6 +6,7 @@ import Link from "next/link";
 import { isSuperAdmin } from "@/lib/rbac";
 import { updateSiteSettingsAction } from "@/actions/admin.actions";
 import { Settings, Save, Sparkles, TrendingUp, Megaphone, Database } from "lucide-react";
+import DatabaseSyncButton from "@/components/admin/DatabaseSyncButton";
 
 export default async function AdminSettingsPage() {
   const currentUser = await getCurrentUser();
@@ -54,6 +55,9 @@ export default async function AdminSettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Database Schema Sync Tool */}
+      <DatabaseSyncButton />
 
       <form action={updateSiteSettingsAction} className="space-y-6 text-xs sm:text-sm">
         {/* General Site Branding */}

@@ -1,8 +1,8 @@
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
--- CreateTable
-CREATE TABLE "User" (
+-- CreateTable: User
+CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -11,13 +11,13 @@ CREATE TABLE "User" (
     "avatar" TEXT,
     "status" TEXT NOT NULL DEFAULT 'ACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "ReporterProfile" (
+-- CreateTable: ReporterProfile
+CREATE TABLE IF NOT EXISTS "ReporterProfile" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "nameMarathi" TEXT NOT NULL,
@@ -28,13 +28,13 @@ CREATE TABLE "ReporterProfile" (
     "isVerified" BOOLEAN NOT NULL DEFAULT true,
     "articleCount" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "ReporterProfile_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Category" (
+-- CreateTable: Category
+CREATE TABLE IF NOT EXISTS "Category" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "nameMarathi" TEXT NOT NULL,
@@ -44,13 +44,13 @@ CREATE TABLE "Category" (
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Category_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Location" (
+-- CreateTable: Location
+CREATE TABLE IF NOT EXISTS "Location" (
     "id" TEXT NOT NULL,
     "district" TEXT NOT NULL,
     "taluka" TEXT NOT NULL,
@@ -58,13 +58,13 @@ CREATE TABLE "Location" (
     "slug" TEXT NOT NULL,
     "isHotspot" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Location_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Article" (
+-- CreateTable: Article
+CREATE TABLE IF NOT EXISTS "Article" (
     "id" TEXT NOT NULL,
     "headline" TEXT NOT NULL,
     "subheadline" TEXT,
@@ -95,13 +95,13 @@ CREATE TABLE "Article" (
     "uniqueVisitors" INTEGER NOT NULL DEFAULT 0,
     "readingTimeMinutes" INTEGER NOT NULL DEFAULT 2,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Article_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "ArticleRevision" (
+-- CreateTable: ArticleRevision
+CREATE TABLE IF NOT EXISTS "ArticleRevision" (
     "id" TEXT NOT NULL,
     "articleId" TEXT NOT NULL,
     "changedById" TEXT NOT NULL,
@@ -112,8 +112,8 @@ CREATE TABLE "ArticleRevision" (
     CONSTRAINT "ArticleRevision_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "LiveUpdate" (
+-- CreateTable: LiveUpdate
+CREATE TABLE IF NOT EXISTS "LiveUpdate" (
     "id" TEXT NOT NULL,
     "articleId" TEXT NOT NULL,
     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -124,8 +124,8 @@ CREATE TABLE "LiveUpdate" (
     CONSTRAINT "LiveUpdate_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "BreakingNews" (
+-- CreateTable: BreakingNews
+CREATE TABLE IF NOT EXISTS "BreakingNews" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "linkUrl" TEXT,
@@ -134,13 +134,13 @@ CREATE TABLE "BreakingNews" (
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "expiresAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "BreakingNews_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Advertisement" (
+-- CreateTable: Advertisement
+CREATE TABLE IF NOT EXISTS "Advertisement" (
     "id" TEXT NOT NULL,
     "advertiser" TEXT NOT NULL,
     "bannerUrl" TEXT NOT NULL,
@@ -158,13 +158,13 @@ CREATE TABLE "Advertisement" (
     "clicks" INTEGER NOT NULL DEFAULT 0,
     "campaignRevenue" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Advertisement_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "AdImpression" (
+-- CreateTable: AdImpression
+CREATE TABLE IF NOT EXISTS "AdImpression" (
     "id" TEXT NOT NULL,
     "adId" TEXT NOT NULL,
     "visitorHash" TEXT NOT NULL,
@@ -173,8 +173,8 @@ CREATE TABLE "AdImpression" (
     CONSTRAINT "AdImpression_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "AdClick" (
+-- CreateTable: AdClick
+CREATE TABLE IF NOT EXISTS "AdClick" (
     "id" TEXT NOT NULL,
     "adId" TEXT NOT NULL,
     "visitorHash" TEXT NOT NULL,
@@ -183,8 +183,8 @@ CREATE TABLE "AdClick" (
     CONSTRAINT "AdClick_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "ArticleView" (
+-- CreateTable: ArticleView
+CREATE TABLE IF NOT EXISTS "ArticleView" (
     "id" TEXT NOT NULL,
     "articleId" TEXT NOT NULL,
     "visitorHash" TEXT NOT NULL,
@@ -196,8 +196,8 @@ CREATE TABLE "ArticleView" (
     CONSTRAINT "ArticleView_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "WhatsAppSubscriber" (
+-- CreateTable: WhatsAppSubscriber
+CREATE TABLE IF NOT EXISTS "WhatsAppSubscriber" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "phone" TEXT NOT NULL,
@@ -206,13 +206,13 @@ CREATE TABLE "WhatsAppSubscriber" (
     "consent" BOOLEAN NOT NULL DEFAULT true,
     "status" TEXT NOT NULL DEFAULT 'ACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "WhatsAppSubscriber_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "PushSubscription" (
+-- CreateTable: PushSubscription
+CREATE TABLE IF NOT EXISTS "PushSubscription" (
     "id" TEXT NOT NULL,
     "endpoint" TEXT NOT NULL,
     "p256dh" TEXT NOT NULL,
@@ -223,8 +223,8 @@ CREATE TABLE "PushSubscription" (
     CONSTRAINT "PushSubscription_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Clipping" (
+-- CreateTable: Clipping
+CREATE TABLE IF NOT EXISTS "Clipping" (
     "id" TEXT NOT NULL,
     "articleId" TEXT NOT NULL,
     "format" TEXT NOT NULL,
@@ -235,8 +235,8 @@ CREATE TABLE "Clipping" (
     CONSTRAINT "Clipping_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "AuditLog" (
+-- CreateTable: AuditLog
+CREATE TABLE IF NOT EXISTS "AuditLog" (
     "id" TEXT NOT NULL,
     "userId" TEXT,
     "action" TEXT NOT NULL,
@@ -249,8 +249,8 @@ CREATE TABLE "AuditLog" (
     CONSTRAINT "AuditLog_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "Redirect" (
+-- CreateTable: Redirect
+CREATE TABLE IF NOT EXISTS "Redirect" (
     "id" TEXT NOT NULL,
     "sourceSlug" TEXT NOT NULL,
     "destinationSlug" TEXT NOT NULL,
@@ -260,19 +260,19 @@ CREATE TABLE "Redirect" (
     CONSTRAINT "Redirect_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "SiteSetting" (
+-- CreateTable: SiteSetting
+CREATE TABLE IF NOT EXISTS "SiteSetting" (
     "id" TEXT NOT NULL,
     "key" TEXT NOT NULL,
     "value" TEXT NOT NULL,
     "description" TEXT,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "SiteSetting_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "AIProvider" (
+-- CreateTable: AIProvider
+CREATE TABLE IF NOT EXISTS "AIProvider" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "providerType" TEXT NOT NULL,
@@ -288,13 +288,13 @@ CREATE TABLE "AIProvider" (
     "lastTestStatus" TEXT,
     "lastTestError" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "AIProvider_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "AIUsageLog" (
+-- CreateTable: AIUsageLog
+CREATE TABLE IF NOT EXISTS "AIUsageLog" (
     "id" TEXT NOT NULL,
     "providerId" TEXT,
     "providerType" TEXT NOT NULL,
@@ -312,195 +312,176 @@ CREATE TABLE "AIUsageLog" (
     CONSTRAINT "AIUsageLog_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+-- CreateTable: MediaAsset
+CREATE TABLE IF NOT EXISTS "MediaAsset" (
+    "id" TEXT NOT NULL,
+    "originalName" TEXT NOT NULL,
+    "optimizedName" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "thumbnailUrl" TEXT,
+    "mimeType" TEXT NOT NULL,
+    "format" TEXT NOT NULL,
+    "width" INTEGER,
+    "height" INTEGER,
+    "originalSize" INTEGER NOT NULL,
+    "optimizedSize" INTEGER NOT NULL,
+    "savedBytes" INTEGER NOT NULL DEFAULT 0,
+    "savedPercent" DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    "altText" TEXT,
+    "uploadedById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "MediaAsset_pkey" PRIMARY KEY ("id")
+);
 
 -- CreateIndex
-CREATE INDEX "User_role_idx" ON "User"("role");
+CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");
+CREATE INDEX IF NOT EXISTS "User_role_idx" ON "User"("role");
+CREATE INDEX IF NOT EXISTS "User_email_idx" ON "User"("email");
 
--- CreateIndex
-CREATE INDEX "User_email_idx" ON "User"("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "ReporterProfile_userId_key" ON "ReporterProfile"("userId");
 
--- CreateIndex
-CREATE UNIQUE INDEX "ReporterProfile_userId_key" ON "ReporterProfile"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "Category_slug_key" ON "Category"("slug");
+CREATE INDEX IF NOT EXISTS "Category_slug_idx" ON "Category"("slug");
 
--- CreateIndex
-CREATE UNIQUE INDEX "Category_slug_key" ON "Category"("slug");
+CREATE UNIQUE INDEX IF NOT EXISTS "Location_slug_key" ON "Location"("slug");
+CREATE INDEX IF NOT EXISTS "Location_slug_idx" ON "Location"("slug");
+CREATE INDEX IF NOT EXISTS "Location_taluka_idx" ON "Location"("taluka");
+CREATE INDEX IF NOT EXISTS "Location_village_idx" ON "Location"("village");
 
--- CreateIndex
-CREATE INDEX "Category_slug_idx" ON "Category"("slug");
+CREATE UNIQUE INDEX IF NOT EXISTS "Article_slug_key" ON "Article"("slug");
+CREATE INDEX IF NOT EXISTS "Article_slug_idx" ON "Article"("slug");
+CREATE INDEX IF NOT EXISTS "Article_status_idx" ON "Article"("status");
+CREATE INDEX IF NOT EXISTS "Article_publishedAt_idx" ON "Article"("publishedAt");
+CREATE INDEX IF NOT EXISTS "Article_categoryId_idx" ON "Article"("categoryId");
+CREATE INDEX IF NOT EXISTS "Article_locationId_idx" ON "Article"("locationId");
+CREATE INDEX IF NOT EXISTS "Article_reporterId_idx" ON "Article"("reporterId");
 
--- CreateIndex
-CREATE UNIQUE INDEX "Location_slug_key" ON "Location"("slug");
+CREATE INDEX IF NOT EXISTS "ArticleRevision_articleId_idx" ON "ArticleRevision"("articleId");
+CREATE INDEX IF NOT EXISTS "ArticleRevision_createdAt_idx" ON "ArticleRevision"("createdAt");
 
--- CreateIndex
-CREATE INDEX "Location_slug_idx" ON "Location"("slug");
+CREATE INDEX IF NOT EXISTS "LiveUpdate_articleId_idx" ON "LiveUpdate"("articleId");
+CREATE INDEX IF NOT EXISTS "LiveUpdate_timestamp_idx" ON "LiveUpdate"("timestamp");
 
--- CreateIndex
-CREATE INDEX "Location_taluka_idx" ON "Location"("taluka");
+CREATE INDEX IF NOT EXISTS "BreakingNews_isActive_idx" ON "BreakingNews"("isActive");
 
--- CreateIndex
-CREATE INDEX "Location_village_idx" ON "Location"("village");
+CREATE INDEX IF NOT EXISTS "Advertisement_placement_idx" ON "Advertisement"("placement");
+CREATE INDEX IF NOT EXISTS "Advertisement_isActive_idx" ON "Advertisement"("isActive");
 
--- CreateIndex
-CREATE UNIQUE INDEX "Article_slug_key" ON "Article"("slug");
+CREATE INDEX IF NOT EXISTS "AdImpression_adId_idx" ON "AdImpression"("adId");
+CREATE INDEX IF NOT EXISTS "AdImpression_createdAt_idx" ON "AdImpression"("createdAt");
 
--- CreateIndex
-CREATE INDEX "Article_slug_idx" ON "Article"("slug");
+CREATE INDEX IF NOT EXISTS "AdClick_adId_idx" ON "AdClick"("adId");
 
--- CreateIndex
-CREATE INDEX "Article_status_idx" ON "Article"("status");
+CREATE INDEX IF NOT EXISTS "ArticleView_articleId_idx" ON "ArticleView"("articleId");
+CREATE INDEX IF NOT EXISTS "ArticleView_createdAt_idx" ON "ArticleView"("createdAt");
 
--- CreateIndex
-CREATE INDEX "Article_publishedAt_idx" ON "Article"("publishedAt");
+CREATE UNIQUE INDEX IF NOT EXISTS "WhatsAppSubscriber_phone_key" ON "WhatsAppSubscriber"("phone");
+CREATE INDEX IF NOT EXISTS "WhatsAppSubscriber_status_idx" ON "WhatsAppSubscriber"("status");
+CREATE INDEX IF NOT EXISTS "WhatsAppSubscriber_phone_idx" ON "WhatsAppSubscriber"("phone");
 
--- CreateIndex
-CREATE INDEX "Article_categoryId_idx" ON "Article"("categoryId");
+CREATE UNIQUE INDEX IF NOT EXISTS "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");
 
--- CreateIndex
-CREATE INDEX "Article_locationId_idx" ON "Article"("locationId");
+CREATE INDEX IF NOT EXISTS "Clipping_articleId_idx" ON "Clipping"("articleId");
 
--- CreateIndex
-CREATE INDEX "Article_reporterId_idx" ON "Article"("reporterId");
+CREATE INDEX IF NOT EXISTS "AuditLog_entity_idx" ON "AuditLog"("entity");
+CREATE INDEX IF NOT EXISTS "AuditLog_action_idx" ON "AuditLog"("action");
+CREATE INDEX IF NOT EXISTS "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
 
--- CreateIndex
-CREATE INDEX "ArticleRevision_articleId_idx" ON "ArticleRevision"("articleId");
+CREATE UNIQUE INDEX IF NOT EXISTS "Redirect_sourceSlug_key" ON "Redirect"("sourceSlug");
+CREATE INDEX IF NOT EXISTS "Redirect_sourceSlug_idx" ON "Redirect"("sourceSlug");
 
--- CreateIndex
-CREATE INDEX "ArticleRevision_createdAt_idx" ON "ArticleRevision"("createdAt");
+CREATE UNIQUE INDEX IF NOT EXISTS "SiteSetting_key_key" ON "SiteSetting"("key");
+CREATE INDEX IF NOT EXISTS "SiteSetting_key_idx" ON "SiteSetting"("key");
 
--- CreateIndex
-CREATE INDEX "LiveUpdate_articleId_idx" ON "LiveUpdate"("articleId");
+CREATE INDEX IF NOT EXISTS "AIProvider_isActive_idx" ON "AIProvider"("isActive");
+CREATE INDEX IF NOT EXISTS "AIProvider_isDefault_idx" ON "AIProvider"("isDefault");
+CREATE INDEX IF NOT EXISTS "AIProvider_providerType_idx" ON "AIProvider"("providerType");
 
--- CreateIndex
-CREATE INDEX "LiveUpdate_timestamp_idx" ON "LiveUpdate"("timestamp");
+CREATE INDEX IF NOT EXISTS "AIUsageLog_providerId_idx" ON "AIUsageLog"("providerId");
+CREATE INDEX IF NOT EXISTS "AIUsageLog_createdAt_idx" ON "AIUsageLog"("createdAt");
 
--- CreateIndex
-CREATE INDEX "BreakingNews_isActive_idx" ON "BreakingNews"("isActive");
+CREATE INDEX IF NOT EXISTS "MediaAsset_format_idx" ON "MediaAsset"("format");
+CREATE INDEX IF NOT EXISTS "MediaAsset_createdAt_idx" ON "MediaAsset"("createdAt");
+CREATE INDEX IF NOT EXISTS "MediaAsset_uploadedById_idx" ON "MediaAsset"("uploadedById");
 
--- CreateIndex
-CREATE INDEX "Advertisement_placement_idx" ON "Advertisement"("placement");
+-- Foreign Keys (Safe blocks)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ReporterProfile_userId_fkey') THEN
+        ALTER TABLE "ReporterProfile" ADD CONSTRAINT "ReporterProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "Advertisement_isActive_idx" ON "Advertisement"("isActive");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Article_categoryId_fkey') THEN
+        ALTER TABLE "Article" ADD CONSTRAINT "Article_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "AdImpression_adId_idx" ON "AdImpression"("adId");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Article_locationId_fkey') THEN
+        ALTER TABLE "Article" ADD CONSTRAINT "Article_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "Location"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "AdImpression_createdAt_idx" ON "AdImpression"("createdAt");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Article_reporterId_fkey') THEN
+        ALTER TABLE "Article" ADD CONSTRAINT "Article_reporterId_fkey" FOREIGN KEY ("reporterId") REFERENCES "ReporterProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "AdClick_adId_idx" ON "AdClick"("adId");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Article_createdById_fkey') THEN
+        ALTER TABLE "Article" ADD CONSTRAINT "Article_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "ArticleView_articleId_idx" ON "ArticleView"("articleId");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Article_submittedById_fkey') THEN
+        ALTER TABLE "Article" ADD CONSTRAINT "Article_submittedById_fkey" FOREIGN KEY ("submittedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "ArticleView_createdAt_idx" ON "ArticleView"("createdAt");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Article_reviewedById_fkey') THEN
+        ALTER TABLE "Article" ADD CONSTRAINT "Article_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE UNIQUE INDEX "WhatsAppSubscriber_phone_key" ON "WhatsAppSubscriber"("phone");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Article_approvedById_fkey') THEN
+        ALTER TABLE "Article" ADD CONSTRAINT "Article_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "WhatsAppSubscriber_status_idx" ON "WhatsAppSubscriber"("status");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Article_publishedById_fkey') THEN
+        ALTER TABLE "Article" ADD CONSTRAINT "Article_publishedById_fkey" FOREIGN KEY ("publishedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "WhatsAppSubscriber_phone_idx" ON "WhatsAppSubscriber"("phone");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ArticleRevision_articleId_fkey') THEN
+        ALTER TABLE "ArticleRevision" ADD CONSTRAINT "ArticleRevision_articleId_fkey" FOREIGN KEY ("articleId") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE UNIQUE INDEX "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ArticleRevision_changedById_fkey') THEN
+        ALTER TABLE "ArticleRevision" ADD CONSTRAINT "ArticleRevision_changedById_fkey" FOREIGN KEY ("changedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "Clipping_articleId_idx" ON "Clipping"("articleId");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'LiveUpdate_articleId_fkey') THEN
+        ALTER TABLE "LiveUpdate" ADD CONSTRAINT "LiveUpdate_articleId_fkey" FOREIGN KEY ("articleId") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "AuditLog_entity_idx" ON "AuditLog"("entity");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AdImpression_adId_fkey') THEN
+        ALTER TABLE "AdImpression" ADD CONSTRAINT "AdImpression_adId_fkey" FOREIGN KEY ("adId") REFERENCES "Advertisement"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "AuditLog_action_idx" ON "AuditLog"("action");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AdClick_adId_fkey') THEN
+        ALTER TABLE "AdClick" ADD CONSTRAINT "AdClick_adId_fkey" FOREIGN KEY ("adId") REFERENCES "Advertisement"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ArticleView_articleId_fkey') THEN
+        ALTER TABLE "ArticleView" ADD CONSTRAINT "ArticleView_articleId_fkey" FOREIGN KEY ("articleId") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE UNIQUE INDEX "Redirect_sourceSlug_key" ON "Redirect"("sourceSlug");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Clipping_articleId_fkey') THEN
+        ALTER TABLE "Clipping" ADD CONSTRAINT "Clipping_articleId_fkey" FOREIGN KEY ("articleId") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "Redirect_sourceSlug_idx" ON "Redirect"("sourceSlug");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AuditLog_userId_fkey') THEN
+        ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE UNIQUE INDEX "SiteSetting_key_key" ON "SiteSetting"("key");
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'AIUsageLog_providerId_fkey') THEN
+        ALTER TABLE "AIUsageLog" ADD CONSTRAINT "AIUsageLog_providerId_fkey" FOREIGN KEY ("providerId") REFERENCES "AIProvider"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
 
--- CreateIndex
-CREATE INDEX "SiteSetting_key_idx" ON "SiteSetting"("key");
-
--- CreateIndex
-CREATE INDEX "AIProvider_isActive_idx" ON "AIProvider"("isActive");
-
--- CreateIndex
-CREATE INDEX "AIProvider_isDefault_idx" ON "AIProvider"("isDefault");
-
--- CreateIndex
-CREATE INDEX "AIProvider_providerType_idx" ON "AIProvider"("providerType");
-
--- CreateIndex
-CREATE INDEX "AIUsageLog_providerId_idx" ON "AIUsageLog"("providerId");
-
--- CreateIndex
-CREATE INDEX "AIUsageLog_createdAt_idx" ON "AIUsageLog"("createdAt");
-
--- AddForeignKey
-ALTER TABLE "ReporterProfile" ADD CONSTRAINT "ReporterProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Article" ADD CONSTRAINT "Article_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Article" ADD CONSTRAINT "Article_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "Location"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Article" ADD CONSTRAINT "Article_reporterId_fkey" FOREIGN KEY ("reporterId") REFERENCES "ReporterProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Article" ADD CONSTRAINT "Article_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Article" ADD CONSTRAINT "Article_submittedById_fkey" FOREIGN KEY ("submittedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Article" ADD CONSTRAINT "Article_reviewedById_fkey" FOREIGN KEY ("reviewedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Article" ADD CONSTRAINT "Article_approvedById_fkey" FOREIGN KEY ("approvedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Article" ADD CONSTRAINT "Article_publishedById_fkey" FOREIGN KEY ("publishedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ArticleRevision" ADD CONSTRAINT "ArticleRevision_articleId_fkey" FOREIGN KEY ("articleId") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ArticleRevision" ADD CONSTRAINT "ArticleRevision_changedById_fkey" FOREIGN KEY ("changedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "LiveUpdate" ADD CONSTRAINT "LiveUpdate_articleId_fkey" FOREIGN KEY ("articleId") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AdImpression" ADD CONSTRAINT "AdImpression_adId_fkey" FOREIGN KEY ("adId") REFERENCES "Advertisement"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AdClick" ADD CONSTRAINT "AdClick_adId_fkey" FOREIGN KEY ("adId") REFERENCES "Advertisement"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ArticleView" ADD CONSTRAINT "ArticleView_articleId_fkey" FOREIGN KEY ("articleId") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Clipping" ADD CONSTRAINT "Clipping_articleId_fkey" FOREIGN KEY ("articleId") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AIUsageLog" ADD CONSTRAINT "AIUsageLog_providerId_fkey" FOREIGN KEY ("providerId") REFERENCES "AIProvider"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'MediaAsset_uploadedById_fkey') THEN
+        ALTER TABLE "MediaAsset" ADD CONSTRAINT "MediaAsset_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END $$;

@@ -24,7 +24,7 @@ export default async function AdminCategoriesPage() {
     }
   }
 
-  if (categories.length === 0 && !dbReady) {
+  if (categories.length === 0) {
     categories = FALLBACK_CATEGORIES.map((c, i) => ({
       ...c,
       sortOrder: i + 1,

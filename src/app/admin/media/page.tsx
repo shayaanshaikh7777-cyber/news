@@ -1,40 +1,41 @@
 import React from "react";
-import prisma, { isDatabaseAvailable } from "@/lib/prisma";
+import { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Image as ImageIcon, Upload, ExternalLink, Check, Copy, Database } from "lucide-react";
+import { Image as ImageIcon, Database } from "lucide-react";
+import MediaLibraryClient from "@/components/admin/MediaLibraryClient";
+import { getMediaListAction } from "@/actions/media.actions";
+
+export const dynamic = "force-dynamic";
 
 export default async function AdminMediaPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
   const dbReady = await isDatabaseAvailable();
-  let articlesWithImages: any[] = [];
-
-  if (dbReady) {
-    try {
-      articlesWithImages = await prisma.article.findMany({
-        where: { featuredImage: { not: null } },
-        select: { id: true, headline: true, featuredImage: true, publishedAt: true },
-        orderBy: { publishedAt: "desc" },
-        take: 20,
-      });
-    } catch (e) {
-      console.error("[AdminMediaPage DB error]", e);
-    }
-  }
+  const { assets, total, totalSavedBytes } = await getMediaListAction({
+    page: 1,
+    pageSize: 32,
+  });
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+    <div className="max-w-7xl mx-auto space-y-6 font-marathi">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200">
         <div>
           <h1 className="text-2xl font-black font-headline text-gray-950 flex items-center gap-2">
-            <ImageIcon className="w-6 h-6 text-red-700" />
-            <span>मीडिया लायब्ररी (Newsroom Media Library)</span>
+            <ImageIcon className="w-7 h-7 text-red-700" />
+            <span>मीडिया व इमेज ऑप्टिमायझेशन (Media & Image Optimization)</span>
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            न्यूजरूममध्ये वापरलेले सर्व फोटो, कात्रणे आणि ग्राफिक्स.
+            न्यूजरूमसाठी स्वयंचलित Sharp कॉम्प्रेशन • WebP आणि AVIF फॉरमॅट्स • द्रुतगती लोडिंग व बँडविड्थ बचत.
           </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1.5 bg-red-50 text-red-800 border border-red-200 rounded-xl text-xs font-bold">
+            एकूण {total} फोटो उपलब्ध
+          </span>
         </div>
       </div>
 
@@ -42,56 +43,19 @@ export default async function AdminMediaPage() {
         <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-300">
           <Database className="w-5 h-5 flex-shrink-0 text-amber-600" />
           <div>
-            <span className="font-bold">डेटाबेस सध्या उपलब्ध नाही (Database Unconfigured):</span>{" "}
-            अपलोड केलेले मीडिया लोड करण्यासाठी प्रॉडक्शन PostgreSQL DATABASE_URL आवश्यक आहे.
+            <span className="font-bold">डेटाबेस सूचना:</span>{" "}
+            अपलोड केलेल्या इमेजचे मेटाडेटा कायमस्वरूपी जतन करण्यासाठी वैध PostgreSQL डेटाबेस आवश्यक आहे.
           </div>
         </div>
       )}
 
-      {/* Cloud Object Storage Status Bar */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex flex-wrap items-center justify-between gap-4 text-xs">
-        <div className="flex items-center gap-2 font-semibold text-gray-700">
-          <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>
-          <span>स्टोरेज इंजिन: Sharp + Local/S3 Object Storage Abstraction</span>
-        </div>
-        <div className="text-gray-500">
-          समर्थित फॉरमॅट्स: WebP, AVIF, PNG, JPEG (कमाल आकार: १०MB)
-        </div>
-      </div>
-
-      {/* Media Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-        {articlesWithImages.map((item) => (
-          <div
-            key={item.id}
-            className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden group hover:border-red-700 transition-all flex flex-col justify-between"
-          >
-            <div className="relative aspect-video w-full bg-gray-100 overflow-hidden">
-              <img
-                src={item.featuredImage!}
-                alt={item.headline}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-              />
-            </div>
-
-            <div className="p-3">
-              <p className="text-xs font-bold text-gray-900 line-clamp-1">{item.headline}</p>
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 text-[10px] text-gray-500">
-                <a
-                  href={item.featuredImage!}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:text-red-800 flex items-center gap-1 font-semibold"
-                >
-                  <span>फोटो पाहा</span>
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Interactive Media Library Client */}
+      <MediaLibraryClient
+        initialAssets={assets}
+        totalCount={total}
+        totalSavedBytes={totalSavedBytes}
+        dbReady={dbReady}
+      />
     </div>
   );
 }
-
