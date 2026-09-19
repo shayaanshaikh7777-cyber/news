@@ -2,20 +2,25 @@ import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, Search, Filter, Eye, Edit, Newspaper, ExternalLink, Database } from "lucide-react";
+import { Plus, Search, Filter, Eye, Edit, Newspaper, ExternalLink, Database, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Props {
   searchParams: Promise<{
     status?: string;
     q?: string;
+    page?: string;
   }>;
 }
+
+const PAGE_SIZE = 20;
 
 export default async function AdminArticlesPage({ searchParams }: Props) {
   const user = await getCurrentUser();
   if (!user) redirect("/admin/login");
 
-  const { status = "ALL", q = "" } = await searchParams;
+  const { status = "ALL", q = "", page: pageParam = "1" } = await searchParams;
+  const page = Math.max(1, parseInt(pageParam, 10) || 1);
+  const skip = (page - 1) * PAGE_SIZE;
 
   const whereClause: Record<string, unknown> = {};
 
@@ -25,31 +30,41 @@ export default async function AdminArticlesPage({ searchParams }: Props) {
 
   if (q.trim()) {
     whereClause.OR = [
-      { headline: { contains: q.trim() } },
-      { summary: { contains: q.trim() } },
+      { headline: { contains: q.trim(), mode: "insensitive" } },
+      { summary: { contains: q.trim(), mode: "insensitive" } },
     ];
   }
 
   const dbReady = await isDatabaseAvailable();
   let articles: any[] = [];
+  let totalArticles = 0;
 
   if (dbReady) {
     try {
-      articles = await prisma.article.findMany({
-        where: whereClause as any,
-        include: {
-          category: true,
-          location: true,
-          reporter: true,
-          createdBy: true,
-          _count: { select: { revisions: true } },
-        },
-        orderBy: { updatedAt: "desc" },
-      });
+      const [count, list] = await Promise.all([
+        prisma.article.count({ where: whereClause as any }),
+        prisma.article.findMany({
+          where: whereClause as any,
+          take: PAGE_SIZE,
+          skip: skip,
+          include: {
+            category: true,
+            location: true,
+            reporter: true,
+            createdBy: true,
+            _count: { select: { revisions: true } },
+          },
+          orderBy: { updatedAt: "desc" },
+        }),
+      ]);
+      totalArticles = count;
+      articles = list;
     } catch (e) {
       console.error("[AdminArticlesPage DB error]", e);
     }
   }
+
+  const totalPages = Math.max(1, Math.ceil(totalArticles / PAGE_SIZE));
 
   const statuses = [
     { key: "ALL", label: "सर्व (All)" },
@@ -94,7 +109,7 @@ export default async function AdminArticlesPage({ searchParams }: Props) {
             न्यूजरूम वार्ता संकलन (Newsroom Articles)
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            एकूण {articles.length} बातम्या उपलब्ध आहेत.
+            एकूण {totalArticles} बातम्या उपलब्ध आहेत {totalPages > 1 ? `(पान ${page} / ${totalPages})` : ""}.
           </p>
         </div>
 
@@ -124,6 +139,21 @@ export default async function AdminArticlesPage({ searchParams }: Props) {
           </div>
         </div>
       )}
+
+      {/* Search and Filters */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <form method="GET" action="/admin/articles" className="relative flex-1 max-w-md">
+          <input type="hidden" name="status" value={status} />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            name="q"
+            defaultValue={q}
+            placeholder="शीर्षक किंवा मजकूर शोधा..."
+            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent text-gray-900 placeholder:text-gray-400"
+          />
+        </form>
+      </div>
 
       {/* Status Filter Bar */}
       <div className="flex items-center gap-1 overflow-x-auto pb-2 border-b border-gray-200 text-xs font-bold whitespace-nowrap">
@@ -158,9 +188,19 @@ export default async function AdminArticlesPage({ searchParams }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {articles.map((art) => (
-                <tr key={art.id} className="hover:bg-gray-50/80 transition-colors">
-                  <td className="py-3 px-4 max-w-sm">
+              {articles.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-gray-500">
+                    <p className="font-semibold text-sm">कोणतीही बातमी आढळली नाही.</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {q ? "शोध निकष बदलून पुन्हा प्रयत्न करा." : "नवीन बातमी तयार करण्यासाठी वरील बटणावर क्लिक करा."}
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                articles.map((art) => (
+                  <tr key={art.id} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="py-3 px-4 max-w-sm">
                     <Link
                       href={`/admin/articles/${art.id}/edit`}
                       className="font-bold text-gray-950 hover:text-red-800 text-sm line-clamp-1"
@@ -239,10 +279,64 @@ export default async function AdminArticlesPage({ searchParams }: Props) {
                     </div>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Footer */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 bg-gray-50/80 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600 font-medium">
+            <div>
+              एकूण <span className="font-bold text-gray-900">{totalArticles}</span> बातम्यांपैकी{" "}
+              <span className="font-bold text-gray-900">{skip + 1}</span> ते{" "}
+              <span className="font-bold text-gray-900">{Math.min(skip + PAGE_SIZE, totalArticles)}</span> दर्शवत आहे
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {page > 1 ? (
+                <Link
+                  href={`/admin/articles?page=${page - 1}&status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors font-bold shadow-xs"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>मागील</span>
+                </Link>
+              ) : (
+                <button
+                  disabled
+                  className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-gray-400 cursor-not-allowed font-bold"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>मागील</span>
+                </button>
+              )}
+
+              <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg font-bold text-gray-900">
+                {page} / {totalPages}
+              </span>
+
+              {page < totalPages ? (
+                <Link
+                  href={`/admin/articles?page=${page + 1}&status=${status}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors font-bold shadow-xs"
+                >
+                  <span>पुढील</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              ) : (
+                <button
+                  disabled
+                  className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-gray-400 cursor-not-allowed font-bold"
+                >
+                  <span>पुढील</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

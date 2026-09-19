@@ -6,6 +6,7 @@ import {
 } from "../types";
 import { SYSTEM_INSTRUCTION, buildEditorialPrompt } from "../prompts";
 import { AIArticleStudioOutputSchema } from "../../../schemas/ai.schema";
+import { sanitizeError } from "../utils";
 
 export class OpenAIProvider implements IAIProvider {
   private config: AIProviderConfig;
@@ -44,7 +45,7 @@ export class OpenAIProvider implements IAIProvider {
 
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`OpenAI API error [${res.status}]: ${errText}`);
+        throw new Error(`OpenAI API error [${res.status}]: ${sanitizeError(errText)}`);
       }
 
       const data = await res.json();
@@ -97,7 +98,7 @@ export class OpenAIProvider implements IAIProvider {
         return {
           success: false,
           message: "OpenAI कनेक्शन अयशस्वी झाले.",
-          error: `HTTP ${res.status}: ${errText.slice(0, 150)}`,
+          error: `HTTP ${res.status}: ${sanitizeError(errText)}`,
           latencyMs,
           model: modelName,
         };
@@ -114,7 +115,7 @@ export class OpenAIProvider implements IAIProvider {
       };
     } catch (err: unknown) {
       const latencyMs = Date.now() - startTime;
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const errMsg = sanitizeError(err instanceof Error ? err.message : String(err));
       return {
         success: false,
         message: "OpenAI कनेक्शन अयशस्वी झाले.",

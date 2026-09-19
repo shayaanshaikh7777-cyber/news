@@ -78,6 +78,94 @@ export async function createAIDraftArticleAction(data: {
   }
 }
 
+export interface MobileReportInput {
+  headline: string;
+  notes: string;
+  photoUrl?: string;
+  youtubeUrl?: string;
+  categoryId?: string;
+  locationId?: string;
+}
+
+export async function createMobileReportAction(data: MobileReportInput): Promise<{
+  success: boolean;
+  articleId?: string;
+  error?: string;
+}> {
+  const user = await getCurrentUser();
+  if (!user || !isReporter(user.role)) {
+    return { success: false, error: "अनधिकृत वापर. कृपया लॉगिन करा." };
+  }
+
+  if (!(await isDatabaseAvailable())) {
+    return { success: false, error: "डेटाबेस सध्या उपलब्ध नाही (Database Offline)." };
+  }
+
+  if (!data.headline?.trim() || !data.notes?.trim()) {
+    return { success: false, error: "बातमीचे शीर्षक आणि मजकूर दोन्ही आवश्यक आहेत." };
+  }
+
+  try {
+    let catId = data.categoryId;
+    if (catId) {
+      const exists = await prisma.category.findUnique({ where: { id: catId } });
+      if (!exists) catId = undefined;
+    }
+
+    if (!catId) {
+      const defaultCategory =
+        (await prisma.category.findFirst({
+          where: { isActive: true },
+          orderBy: { sortOrder: "asc" },
+        })) || (await prisma.category.findFirst());
+      catId = defaultCategory?.id;
+    }
+
+    if (!catId) {
+      return { success: false, error: "कृपया बातमीसाठी किमान एक विभाग (Category) उपलब्ध असणे आवश्यक आहे." };
+    }
+
+    const cleanSlug = `awaaz-mobile-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
+    const wordCount = data.notes.split(/\s+/).length;
+    const readingTime = Math.max(1, Math.round(wordCount / 150));
+
+    const article = await prisma.article.create({
+      data: {
+        headline: data.headline.trim(),
+        summary: data.headline.trim().slice(0, 200),
+        bodyMarkdown: data.notes.trim(),
+        featuredImage: data.photoUrl?.trim() || null,
+        youtubeUrl: data.youtubeUrl?.trim() || null,
+        categoryId: catId,
+        locationId: data.locationId || null,
+        createdById: user.id,
+        submittedById: user.id,
+        reporterId: user.reporterProfileId || null,
+        status: "SUBMITTED",
+        slug: cleanSlug,
+        readingTimeMinutes: readingTime,
+        priority: 0,
+        isBreaking: false,
+      },
+    });
+
+    await recordAuditLog({
+      userId: user.id,
+      action: "ARTICLE_CREATED",
+      entity: "Article",
+      entityId: article.id,
+      details: { headline: article.headline, source: "MOBILE_REPORTER" },
+    });
+
+    revalidatePath("/admin/articles");
+    revalidatePath("/admin");
+    return { success: true, articleId: article.id };
+  } catch (err: any) {
+    console.error("[createMobileReportAction error]", err);
+    return { success: false, error: err?.message || "बातमी सबमिट करताना त्रुटी आली." };
+  }
+}
+
 export async function createArticleAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user || !isReporter(user.role)) {

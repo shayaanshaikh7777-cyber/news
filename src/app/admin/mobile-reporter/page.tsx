@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createMobileReportAction } from "@/actions/article.actions";
 import {
   Mic,
   MicOff,
@@ -137,25 +138,21 @@ export default function MobileReporterPage() {
     setMessage("");
 
     try {
-      const formData = new FormData();
-      formData.append("headline", headline);
-      formData.append("bodyMarkdown", notes);
-      formData.append("summary", headline);
-      formData.append("featuredImage", photoUrl);
-      formData.append("youtubeUrl", youtubeUrl);
-      formData.append("categoryId", "cm7x111111111111111111111"); // Fallback
-      formData.append("status", "SUBMITTED");
-
-      // Submit
-      const res = await fetch("/admin/articles/new", {
-        method: "POST",
-        body: formData,
+      const res = await createMobileReportAction({
+        headline: headline.trim(),
+        notes: notes.trim(),
+        photoUrl: photoUrl.trim() || undefined,
+        youtubeUrl: youtubeUrl.trim() || undefined,
       });
 
-      setMessage("✅ बातमी यशस्वीरीत्या मुख्य संपादकांकडे पुनरावलोकनासाठी पाठवली गेली आहे!");
-      setTimeout(() => {
-        router.push("/admin/articles");
-      }, 2000);
+      if (res.success) {
+        setMessage("✅ बातमी यशस्वीरीत्या मुख्य संपादकांकडे पुनरावलोकनासाठी पाठवली गेली आहे!");
+        setTimeout(() => {
+          router.push("/admin/articles");
+        }, 2000);
+      } else {
+        setMessage(res.error || "सबमिट करताना त्रुटी आली.");
+      }
     } catch {
       setMessage("सबमिट करताना त्रुटी आली.");
     } finally {

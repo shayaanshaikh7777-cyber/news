@@ -7,6 +7,8 @@ import {
 } from "../types";
 import { SYSTEM_INSTRUCTION, buildEditorialPrompt } from "../prompts";
 import { AIArticleStudioOutputSchema } from "../../../schemas/ai.schema";
+import { sanitizeError } from "../utils";
+export { sanitizeError };
 
 export type GeminiErrorCode =
   | "INVALID_API_KEY"
@@ -22,18 +24,6 @@ export interface ClassifiedGeminiError {
   code: GeminiErrorCode;
   userMessage: string;
   safeDetails: string;
-}
-
-/**
- * Sanitizes any sensitive tokens or API keys from error text to ensure credentials are never leaked.
- */
-export function sanitizeError(text: string): string {
-  if (!text) return "";
-  return String(text)
-    .replace(/AIza[0-9A-Za-z-_]+/g, "AIza••••••••")
-    .replace(/(?:key|apiKey|token|secret)=([^\s&"']+)/gi, "key=••••••••")
-    .replace(/bearer\s+[a-zA-Z0-9._-]+/gi, "Bearer ••••••••")
-    .slice(0, 300);
 }
 
 /**

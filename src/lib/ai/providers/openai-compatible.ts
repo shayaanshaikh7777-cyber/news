@@ -6,6 +6,7 @@ import {
 } from "../types";
 import { SYSTEM_INSTRUCTION, buildEditorialPrompt } from "../prompts";
 import { AIArticleStudioOutputSchema } from "../../../schemas/ai.schema";
+import { sanitizeError, validateSafeUrl } from "../utils";
 
 export class OpenAICompatibleProvider implements IAIProvider {
   private config: AIProviderConfig;
@@ -15,7 +16,12 @@ export class OpenAICompatibleProvider implements IAIProvider {
   }
 
   private getEndpoint(): string {
-    const base = (this.config.baseUrl || "https://api.groq.com/openai/v1").trim().replace(/\/+$/, "");
+    const rawBase = (this.config.baseUrl || "https://api.groq.com/openai/v1").trim();
+    const urlValidation = validateSafeUrl(rawBase);
+    if (!urlValidation.valid) {
+      throw new Error(`अवैध AI Provider URL (SSRF Block): ${urlValidation.error}`);
+    }
+    const base = rawBase.replace(/\/+$/, "");
     if (base.endsWith("/chat/completions")) {
       return base;
     }
@@ -56,7 +62,7 @@ export class OpenAICompatibleProvider implements IAIProvider {
 
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`OpenAI-Compatible API error [${res.status}]: ${errText}`);
+        throw new Error(`OpenAI-Compatible API error [${res.status}]: ${sanitizeError(errText)}`);
       }
 
       const data = await res.json();
@@ -83,8 +89,20 @@ export class OpenAICompatibleProvider implements IAIProvider {
   async testConnection(): Promise<AITestResult> {
     const startTime = Date.now();
     const modelName = this.config.model || "llama-3.3-70b-versatile";
-    const endpoint = this.getEndpoint();
 
+    const rawBase = (this.config.baseUrl || "https://api.groq.com/openai/v1").trim();
+    const urlValidation = validateSafeUrl(rawBase);
+    if (!urlValidation.valid) {
+      return {
+        success: false,
+        message: "OpenAI-Compatible URL सुरक्षा तपासणी अयशस्वी (SSRF Security Guard).",
+        error: urlValidation.error || "अवैध किंवा प्रतिबंधित URL पत्ता.",
+        latencyMs: 0,
+        model: modelName,
+      };
+    }
+
+    const endpoint = this.getEndpoint();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
@@ -113,8 +131,8 @@ export class OpenAICompatibleProvider implements IAIProvider {
         const errText = await res.text();
         return {
           success: false,
-          message: "OpenAI-Compatible कनेक्शन अयशस्वी झाले.",
-          error: `HTTP ${res.status}: ${errText.slice(0, 150)}`,
+          message: `${this.config.name || "OpenAI-Compatible"} कनेक्शन अयशस्वी झाले.`,
+          error: `HTTP ${res.status}: ${sanitizeError(errText.slice(0, 150))}`,
           latencyMs,
           model: modelName,
         };
@@ -131,10 +149,10 @@ export class OpenAICompatibleProvider implements IAIProvider {
       };
     } catch (err: unknown) {
       const latencyMs = Date.now() - startTime;
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const errMsg = sanitizeError(err instanceof Error ? err.message : String(err));
       return {
         success: false,
-        message: "OpenAI-Compatible कनेक्शन अयशस्वी झाले.",
+        message: `${this.config.name || "OpenAI-Compatible"} कनेक्शन अयशस्वी झाले.`,
         error: errMsg,
         latencyMs,
         model: modelName,
