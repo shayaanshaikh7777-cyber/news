@@ -9,6 +9,7 @@ import {
   setDefaultAIProviderAction,
   toggleAIProviderActiveAction,
   testAIProviderAction,
+  updateProviderModelAction,
 } from "@/actions/ai-provider.actions";
 import {
   Sparkles,
@@ -61,6 +62,7 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
 
   // Loading & error state
   const [submitting, setSubmitting] = useState(false);
+  const [upgradingId, setUpgradingId] = useState<string | null>(null);
   const [modalError, setModalError] = useState("");
 
   // Form state
@@ -68,7 +70,7 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
     name: "",
     providerType: "GEMINI",
     apiKey: "",
-    model: "gemini-2.5-flash",
+    model: "gemini-3.6-flash",
     baseUrl: "",
     temperature: "0.2",
     maxTokens: "2048",
@@ -80,10 +82,10 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
   const openCreateModal = () => {
     setEditingProvider(null);
     setFormData({
-      name: "Google Gemini 2.5 Flash",
+      name: "Google Gemini 3.6 Flash",
       providerType: "GEMINI",
       apiKey: "",
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       baseUrl: "",
       temperature: "0.2",
       maxTokens: "2048",
@@ -117,9 +119,9 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
     if (type === "GEMINI") {
       setFormData((prev) => ({
         ...prev,
-        name: "Google Gemini 2.5 Flash",
+        name: "Google Gemini 3.6 Flash",
         providerType: "GEMINI",
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         baseUrl: "",
       }));
     } else if (type === "OPENAI") {
@@ -227,6 +229,39 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
       });
     } finally {
       setTestingId(null);
+    }
+  };
+
+  const handleQuickUpgradeModel = async (
+    providerId: string,
+    targetModel: string = "gemini-3.6-flash"
+  ) => {
+    setUpgradingId(providerId);
+    try {
+      const res = await updateProviderModelAction(providerId, targetModel);
+      if (!res.success) {
+        alert(res.error || "मॉडेल बदलता आले नाही.");
+        return;
+      }
+      setProviders((prev) =>
+        prev.map((p) =>
+          p.id === providerId
+            ? {
+                ...p,
+                model: targetModel,
+                name: p.name.includes("2.5") ? p.name.replace("2.5", "3.6") : p.name,
+                lastTestError: null,
+                lastTestStatus: null,
+              }
+            : p
+        )
+      );
+      // Immediately trigger live connection test with the new model
+      await handleTest(providerId);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "मॉडेल बदलताना अडचण आली.");
+    } finally {
+      setUpgradingId(null);
     }
   };
 
@@ -462,6 +497,26 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
                     </div>
                   </div>
 
+                  {/* Deprecated model banner & quick upgrade */}
+                  {p.providerType === "GEMINI" && (p.model === "gemini-2.5-flash" || p.model.includes("2.5")) && (
+                    <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-950 text-xs flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span className="text-[11px] leading-snug">
+                          <strong>{p.model}</strong> हे मॉडेल गुगलने बंद केले आहे.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickUpgradeModel(p.id, "gemini-3.6-flash")}
+                        disabled={upgradingId === p.id}
+                        className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold px-2.5 py-1 rounded transition-colors flex-shrink-0 disabled:opacity-50"
+                      >
+                        {upgradingId === p.id ? "बदलत आहे..." : "gemini-3.6-flash वर बदला"}
+                      </button>
+                    </div>
+                  )}
+
                   {/* Test Result Message */}
                   {thisTest && (
                     <div
@@ -665,9 +720,41 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
                     required
                     value={formData.model}
                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                    placeholder="उदा. gemini-2.5-flash, gpt-4o-mini"
+                    placeholder="उदा. gemini-3.6-flash, gpt-4o-mini"
                     className="w-full border border-gray-300 rounded-lg p-2.5 text-xs font-mono font-bold"
                   />
+                  {formData.providerType === "GEMINI" && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] text-gray-500 font-medium">शिफारस केलेले मॉडेल्स:</span>
+                      {[
+                        { id: "gemini-3.6-flash", label: "gemini-3.6-flash (शिफारस)", rec: true },
+                        { id: "gemini-3.5-flash", label: "gemini-3.5-flash" },
+                        { id: "gemini-3.5-flash-lite", label: "gemini-3.5-flash-lite" },
+                        { id: "gemini-3.7-flash", label: "gemini-3.7-flash" },
+                      ].map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              model: m.id,
+                              name: prev.name.includes("2.5") ? prev.name.replace("2.5", "3.6") : prev.name,
+                            }));
+                          }}
+                          className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+                            formData.model === m.id
+                              ? "bg-blue-600 text-white font-bold"
+                              : m.rec
+                              ? "bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 font-medium"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
+                          }`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

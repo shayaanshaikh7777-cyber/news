@@ -143,5 +143,25 @@ describe("Gemini Error Classification & Sanitization", () => {
     const result = classifyGeminiError(null);
     expect(result.code).toBe("SDK_CONFIGURATION_ERROR");
   });
+
+  it("classifies MODEL_NOT_FOUND when model is deprecated / no longer available and recommends gemini-3.6-flash", () => {
+    const deprecatedError = {
+      status: 404,
+      message: JSON.stringify({
+        error: {
+          code: 404,
+          message:
+            "This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.6-flash for the latest features and improvements.",
+          status: "NOT_FOUND",
+        },
+      }),
+    };
+
+    const result = classifyGeminiError(deprecatedError, "gemini-2.5-flash");
+    expect(result.code).toBe("MODEL_NOT_FOUND");
+    expect(result.userMessage).toContain("'gemini-2.5-flash' हे Gemini मॉडेल उपलब्ध नाही किंवा बंद झाले आहे");
+    expect(result.userMessage).toContain("gemini-3.6-flash");
+    expect(result.safeDetails).toContain("MODEL_NOT_FOUND (HTTP 404)");
+  });
 });
 

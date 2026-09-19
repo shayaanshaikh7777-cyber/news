@@ -374,6 +374,7 @@ export async function updateAIProviderAction(
         timeoutMs: isNaN(timeoutMs) ? 30000 : timeoutMs,
         isActive,
         isDefault,
+        ...(model !== existing.model ? { lastTestError: null, lastTestStatus: null } : {}),
       },
     });
 
@@ -591,6 +592,75 @@ export async function toggleAIProviderActiveAction(
       success: false,
       error: `स्थिती बदलणे अयशस्वी: ${safeMsg}`,
     };
+  }
+}
+
+/**
+ * Safely updates a provider's model ID without exposing or modifying the stored API key.
+ */
+export async function updateProviderModelAction(
+  providerId: string,
+  newModel: string,
+  newName?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await verifySuperAdmin();
+    if (!user) {
+      return { success: false, error: "अनधिकृत वापर. फक्त मुख्य प्रशासकाला परवानगी आहे." };
+    }
+
+    if (!(await isDatabaseAvailable())) {
+      return { success: false, error: "डेटाबेस उपलब्ध नाही." };
+    }
+
+    const provider = await prisma.aIProvider.findUnique({
+      where: { id: providerId },
+    });
+
+    if (!provider) {
+      return { success: false, error: "AI Provider सापडला नाही." };
+    }
+
+    const cleanModel = newModel.trim();
+    if (!cleanModel) {
+      return { success: false, error: "मॉडेल आयडी रिक्त असू शकत नाही." };
+    }
+
+    const updatedName = newName?.trim() || (
+      provider.name.includes("2.5")
+        ? provider.name.replace("2.5", "3.6")
+        : provider.name
+    );
+
+    await prisma.aIProvider.update({
+      where: { id: providerId },
+      data: {
+        model: cleanModel,
+        name: updatedName,
+        lastTestError: null,
+        lastTestStatus: null,
+      },
+    });
+
+    try {
+      await recordAuditLog({
+        userId: user.id,
+        action: "UPDATE_AI_PROVIDER_MODEL",
+        entity: "AIProvider",
+        entityId: providerId,
+        details: { oldModel: provider.model, newModel: cleanModel },
+      });
+    } catch {}
+
+    try {
+      revalidatePath("/admin/settings/ai");
+      revalidatePath("/admin/ai-studio");
+    } catch {}
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("[updateProviderModelAction Error]:", err);
+    return { success: false, error: "मॉडेल अद्ययावत करताना त्रुटी आली." };
   }
 }
 

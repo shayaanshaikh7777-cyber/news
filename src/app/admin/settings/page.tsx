@@ -122,7 +122,7 @@ export default async function AdminSettingsPage() {
             <input
               type="text"
               name="gemini_model"
-              defaultValue={settingsMap["gemini_model"] || "gemini-2.5-flash"}
+              defaultValue={settingsMap["gemini_model"] || "gemini-3.6-flash"}
               className="w-full border border-gray-300 rounded p-2 text-xs font-mono font-bold"
             />
             <p className="text-[11px] text-gray-500 mt-1">

@@ -41,7 +41,7 @@ export function sanitizeError(text: string): string {
  */
 export function classifyGeminiError(
   err: unknown,
-  modelName: string = "gemini-2.5-flash"
+  modelName: string = "gemini-3.6-flash"
 ): ClassifiedGeminiError {
   if (!err) {
     return {
@@ -172,12 +172,18 @@ export function classifyGeminiError(
     reasons.includes("MODEL_NOT_FOUND") ||
     (combined.includes("models/") && combined.includes("not found")) ||
     combined.includes("is not found") ||
-    combined.includes("is not supported")
+    combined.includes("is not supported") ||
+    combined.includes("no longer available")
   ) {
+    const isDeprecated = combined.includes("no longer available") || combined.includes("is no longer available");
+    const recMsg = isDeprecated || combined.includes("gemini-3.6-flash")
+      ? " (गुगलने 'gemini-3.6-flash' वापरण्याची शिफारस केली आहे). कृपया मॉडेल 'gemini-3.6-flash' निवडा."
+      : " कृपया वैध मॉडेल निवडा.";
+
     return {
       code: "MODEL_NOT_FOUND",
-      userMessage: `'${modelName}' हे Gemini मॉडेल उपलब्ध नाही किंवा असमर्थित आहे.`,
-      safeDetails: `Google API Error: MODEL_NOT_FOUND (HTTP 404). Model '${modelName}' was not found.`,
+      userMessage: `'${modelName}' हे Gemini मॉडेल उपलब्ध नाही किंवा बंद झाले आहे.${recMsg}`,
+      safeDetails: `Google API Error: MODEL_NOT_FOUND (HTTP 404). Model '${modelName}' was not found or is no longer available.`,
     };
   }
 
@@ -229,7 +235,7 @@ export class GeminiProvider implements IAIProvider {
 
     const ai = new GoogleGenAI({ apiKey });
     const promptText = buildEditorialPrompt(input);
-    const modelName = (this.config.model || "gemini-2.5-flash").trim();
+    const modelName = (this.config.model || "gemini-3.6-flash").trim();
 
     const response = await ai.models.generateContent({
       model: modelName,
@@ -269,7 +275,7 @@ export class GeminiProvider implements IAIProvider {
 
   async testConnection(): Promise<AITestResult> {
     const startTime = Date.now();
-    const modelName = (this.config.model || "gemini-2.5-flash").trim();
+    const modelName = (this.config.model || "gemini-3.6-flash").trim();
     const apiKey = (this.config.apiKey || "").trim();
 
     if (!apiKey) {
