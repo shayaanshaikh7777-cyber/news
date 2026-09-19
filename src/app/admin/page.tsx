@@ -1,5 +1,9 @@
-import React from "react";
-import prisma, { isDatabaseAvailable } from "@/lib/prisma";
+import prisma, {
+  isDatabaseAvailable,
+  isDatabaseConfiguredCheck,
+  getLastDatabaseError,
+  getSafeDatabaseInfo,
+} from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -29,7 +33,10 @@ export default async function AdminDashboardPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const isConfigured = isDatabaseConfiguredCheck();
   const dbReady = await isDatabaseAvailable();
+  const lastError = getLastDatabaseError();
+  const safeDb = getSafeDatabaseInfo();
 
   let articlesToday = 0;
   let pendingReviews = 0;
@@ -126,8 +133,8 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Database Warning Banner if offline or unconfigured */}
-      {!dbReady && (
+      {/* Database Status Banners: Strictly distinguishes Unconfigured vs Connection Failed */}
+      {!isConfigured ? (
         <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
           <div className="flex items-start gap-3">
             <div className="p-2 bg-amber-200 text-amber-900 rounded-xl flex-shrink-0 mt-0.5">
@@ -135,10 +142,10 @@ export default async function AdminDashboardPage() {
             </div>
             <div>
               <h3 className="text-sm font-black text-amber-950">
-                डेटाबेस सूचना: PostgreSQL कनेक्शन उपलब्ध नाही (Database Unconfigured)
+                डेटाबेस अनकॉन्फिगर आहे (Database Not Configured)
               </h3>
               <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                CMS सध्या स्थानिक सुरक्षित डेटासेटवर कार्यरत आहे. उत्पादन सर्व्हरवर नवीन बातम्या जतन करण्यासाठी कृपया
+                प्रॉडक्शन वातावरणात <code>DATABASE_URL</code> सेट केलेले नाही. कृपया
                 <strong> Vercel Project Settings &rarr; Environment Variables</strong> मध्ये <code>DATABASE_URL</code> (उदा. Supabase / Neon PostgreSQL) कॉन्फिगर करा.
               </p>
             </div>
@@ -150,7 +157,40 @@ export default async function AdminDashboardPage() {
             सेटिंग्ज तपासा &rarr;
           </Link>
         </div>
-      )}
+      ) : !dbReady ? (
+        <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-red-200 text-red-900 rounded-xl flex-shrink-0 mt-0.5">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-black text-red-950">
+                  डेटाबेस कनेक्शन अयशस्वी (Database Connection Failed)
+                </h3>
+                <span className="bg-red-200 text-red-900 text-[10px] font-mono px-2 py-0.5 rounded font-bold">
+                  {lastError.code || "CONNECTION_FAILED"}
+                </span>
+              </div>
+              <p className="text-xs text-red-800 leading-relaxed">
+                DATABASE_URL कॉन्फिगर केलेले आहे ({safeDb.host || "host"}:{safeDb.port || "5432"}), परंतु PostgreSQL डेटाबेसशी थेट संपर्क साधता आला नाही.
+              </p>
+              {safeDb.isPooler && !safeDb.hasPgBouncer && (
+                <p className="text-[11px] text-red-950 font-semibold bg-red-100 p-2 rounded-lg mt-1 border border-red-200">
+                  💡 Supabase Transaction Pooler (पोर्ट 6543) साठी कनेक्शन स्ट्रिंगच्या शेवटी <code>?pgbouncer=true</code> जोडणे आवश्यक आहे.
+                </p>
+              )}
+            </div>
+          </div>
+          <a
+            href="/api/health"
+            target="_blank"
+            className="text-xs bg-red-800 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-xl whitespace-nowrap transition-colors"
+          >
+            आरोग्य चाचणी (Health Check) &rarr;
+          </a>
+        </div>
+      ) : null}
       {/* Welcome Banner */}
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
