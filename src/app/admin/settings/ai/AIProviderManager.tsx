@@ -51,8 +51,13 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
     id: string;
     success: boolean;
     message: string;
+    error?: string;
     latencyMs?: number;
   } | null>(null);
+
+  React.useEffect(() => {
+    setProviders(initialProviders);
+  }, [initialProviders]);
 
   // Loading & error state
   const [submitting, setSubmitting] = useState(false);
@@ -194,14 +199,31 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
         id: providerId,
         success: res.success,
         message: res.message,
+        error: res.error,
         latencyMs: res.latencyMs,
       });
+
+      // Update local state immediately so last test status and error reflect on card
+      setProviders((prev) =>
+        prev.map((p) =>
+          p.id === providerId
+            ? {
+                ...p,
+                lastTestedAt: new Date().toISOString(),
+                lastTestStatus: res.success ? "SUCCESS" : "FAILED",
+                lastTestError: res.error || null,
+              }
+            : p
+        )
+      );
+
       router.refresh();
     } catch (err: unknown) {
       setTestResult({
         id: providerId,
         success: false,
         message: err instanceof Error ? err.message : "चाचणी अयशस्वी झाली.",
+        error: "CLIENT_ERROR",
       });
     } finally {
       setTestingId(null);
@@ -443,7 +465,7 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
                   {/* Test Result Message */}
                   {thisTest && (
                     <div
-                      className={`mt-3 p-2.5 rounded-lg text-xs font-semibold flex items-start gap-2 ${
+                      className={`mt-3 p-3 rounded-lg text-xs flex items-start gap-2.5 ${
                         thisTest.success
                           ? "bg-green-50 text-green-900 border border-green-200"
                           : "bg-red-50 text-red-900 border border-red-200"
@@ -455,9 +477,14 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
                         <AlertCircle className="w-4 h-4 text-red-700 flex-shrink-0 mt-0.5" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="truncate">{thisTest.message}</p>
-                        {thisTest.latencyMs && (
-                          <span className="text-[10px] text-gray-500">
+                        <p className="font-semibold text-xs leading-relaxed">{thisTest.message}</p>
+                        {!thisTest.success && thisTest.error && (
+                          <div className="mt-1.5 p-1.5 bg-red-100/80 rounded text-[11px] font-mono text-red-800 break-words border border-red-200/60">
+                            {thisTest.error}
+                          </div>
+                        )}
+                        {thisTest.latencyMs !== undefined && (
+                          <span className="block mt-1 text-[10px] text-gray-500 font-normal">
                             विलंबता (Latency): {thisTest.latencyMs}ms
                           </span>
                         )}
@@ -467,16 +494,23 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
 
                   {/* Last tested info */}
                   {p.lastTestedAt && !thisTest && (
-                    <div className="mt-2 text-[10px] text-gray-500 flex items-center gap-1.5">
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          p.lastTestStatus === "SUCCESS" ? "bg-green-500" : "bg-red-500"
-                        }`}
-                      />
-                      <span>
-                        शेवटची चाचणी: {new Date(p.lastTestedAt).toLocaleTimeString("mr-IN")}{" "}
-                        ({p.lastTestStatus === "SUCCESS" ? "यशस्वी" : "त्रुटी"})
-                      </span>
+                    <div className="mt-2 text-[10px] text-gray-500 flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            p.lastTestStatus === "SUCCESS" ? "bg-green-500" : "bg-red-500"
+                          }`}
+                        />
+                        <span>
+                          शेवटची चाचणी: {new Date(p.lastTestedAt).toLocaleTimeString("mr-IN")}{" "}
+                          ({p.lastTestStatus === "SUCCESS" ? "यशस्वी" : "त्रुटी"})
+                        </span>
+                      </div>
+                      {p.lastTestStatus !== "SUCCESS" && p.lastTestError && (
+                        <div className="text-[10px] text-red-700 font-mono bg-red-50 rounded p-1.5 border border-red-100 break-words">
+                          {p.lastTestError}
+                        </div>
+                      )}
                     </div>
                   )}
 
