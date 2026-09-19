@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma, { isDatabaseConfiguredCheck, getSafeDatabaseInfo } from "@/lib/prisma";
+import { isEncryptionKeyConfigured } from "@/lib/ai/encryption";
+import { ensureAITablesExist } from "@/actions/ai-provider.actions";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +41,20 @@ export async function GET() {
       ),
     ]);
 
+    let aiProviderTableReady = false;
+    try {
+      await prisma.aIProvider.count();
+      aiProviderTableReady = true;
+    } catch {
+      try {
+        await ensureAITablesExist();
+        await prisma.aIProvider.count();
+        aiProviderTableReady = true;
+      } catch {
+        aiProviderTableReady = false;
+      }
+    }
+
     return NextResponse.json(
       {
         ok: true,
@@ -51,6 +67,8 @@ export async function GET() {
         is_pooler: safeInfo.isPooler,
         has_pgbouncer: safeInfo.hasPgBouncer,
         username_type: safeInfo.usernameType,
+        ai_tables_ready: aiProviderTableReady,
+        ai_encryption_configured: isEncryptionKeyConfigured(),
       },
       {
         status: 200,

@@ -162,16 +162,23 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
       if (formData.isActive) data.append("isActive", "true");
       if (formData.isDefault) data.append("isDefault", "true");
 
-      if (editingProvider) {
-        await updateAIProviderAction(editingProvider.id, data);
-      } else {
-        await createAIProviderAction(data);
+      const result = editingProvider
+        ? await updateAIProviderAction(editingProvider.id, data)
+        : await createAIProviderAction(data);
+
+      if (!result.success) {
+        setModalError(result.error || "प्रोव्हायडर जतन करणे अयशस्वी झाले.");
+        return;
       }
 
       setIsModalOpen(false);
       router.refresh();
     } catch (err: unknown) {
-      setModalError(err instanceof Error ? err.message : "त्रुटी आली.");
+      setModalError(
+        err instanceof Error
+          ? err.message
+          : "प्रोव्हायडर जतन करताना अनपेक्षित त्रुटी आली."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -203,7 +210,11 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
 
   const handleSetDefault = async (providerId: string) => {
     try {
-      await setDefaultAIProviderAction(providerId);
+      const res = await setDefaultAIProviderAction(providerId);
+      if (!res.success) {
+        alert(res.error || "डीफॉल्ट सेट करताना अडचण आली.");
+        return;
+      }
       router.refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : "डीफॉल्ट सेट करताना अडचण आली.");
@@ -212,7 +223,11 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
 
   const handleToggleActive = async (providerId: string) => {
     try {
-      await toggleAIProviderActiveAction(providerId);
+      const res = await toggleAIProviderActiveAction(providerId);
+      if (!res.success) {
+        alert(res.error || "स्थिती बदलता आली नाही.");
+        return;
+      }
       router.refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : "स्थिती बदलता आली नाही.");
@@ -225,7 +240,11 @@ export default function AIProviderManager({ initialProviders, stats }: Props) {
     }
 
     try {
-      await deleteAIProviderAction(providerId);
+      const res = await deleteAIProviderAction(providerId);
+      if (!res.success) {
+        alert(res.error || "हटवताना त्रुटी आली.");
+        return;
+      }
       router.refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : "हटवताना त्रुटी आली.");

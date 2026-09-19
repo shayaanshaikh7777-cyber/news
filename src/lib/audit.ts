@@ -20,9 +20,22 @@ export async function recordAuditLog(params: {
         ? JSON.stringify(params.details)
         : (params.details as string) || null;
 
+    let validUserId: string | null = null;
+    if (params.userId && params.userId !== "master_admin_root") {
+      try {
+        const u = await prisma.user.findUnique({
+          where: { id: params.userId },
+          select: { id: true },
+        });
+        if (u) validUserId = u.id;
+      } catch {
+        validUserId = null;
+      }
+    }
+
     return await prisma.auditLog.create({
       data: {
-        userId: params.userId || null,
+        userId: validUserId,
         action: params.action,
         entity: params.entity,
         entityId: params.entityId || null,
@@ -31,7 +44,7 @@ export async function recordAuditLog(params: {
       },
     });
   } catch (error) {
-    console.warn("Audit log skipped (database unavailable):", error instanceof Error ? error.message : error);
+    console.warn("Audit log skipped:", error instanceof Error ? error.message : error);
     return null;
   }
 }

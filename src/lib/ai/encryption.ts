@@ -3,6 +3,13 @@ import crypto from "crypto";
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16;
 
+export function isEncryptionKeyConfigured(): boolean {
+  return Boolean(
+    (process.env.AI_ENCRYPTION_KEY && process.env.AI_ENCRYPTION_KEY.trim().length > 0) ||
+    (process.env.JWT_SECRET && process.env.JWT_SECRET.trim().length > 0)
+  );
+}
+
 /**
  * Derives a deterministic 32-byte key for AES-256-GCM.
  * Prioritizes AI_ENCRYPTION_KEY, then JWT_SECRET, with a secure application default.
