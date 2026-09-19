@@ -52,6 +52,7 @@ export default function AdminSidebar({ user }: { user: SessionUser }) {
       ? [
           { label: "वापरकर्ते व भूमिका (Users & RBAC)", href: "/admin/users", icon: Shield },
           { label: "ऑडिट नोंदी (Audit Logs)", href: "/admin/audit-logs", icon: History },
+          { label: "AI प्रोव्हायडर (AI Providers)", href: "/admin/settings/ai", icon: Sparkles, badge: "P0" },
           { label: "वेबसाइट सेटिंग्ज (Settings)", href: "/admin/settings", icon: Settings },
         ]
       : []),

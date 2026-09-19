@@ -25,23 +25,12 @@ async function main() {
   await prisma.siteSetting.deleteMany({});
 
   const salt = await bcrypt.genSalt(10);
-  const masterPassword = await bcrypt.hash("Aa@12345", salt);
   const adminPassword = await bcrypt.hash("Admin@123", salt);
   const editorPassword = await bcrypt.hash("Editor@123", salt);
   const reporterPassword = await bcrypt.hash("Reporter@123", salt);
   const viewerPassword = await bcrypt.hash("Viewer@123", salt);
 
   // 1. Users
-  const masterAdmin = await prisma.user.create({
-    data: {
-      name: "मुख्य संपादक (Master Admin)",
-      email: "admin@test.com",
-      passwordHash: masterPassword,
-      role: "SUPER_ADMIN",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-    },
-  });
-
   const superAdmin = await prisma.user.create({
     data: {
       name: "बाळासाहेब देशमुख",
@@ -582,3 +571,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

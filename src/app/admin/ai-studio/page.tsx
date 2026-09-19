@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Sparkles,
   Send,
@@ -149,7 +150,7 @@ export default function AINewsStudioPage() {
         <div>
           <div className="inline-flex items-center gap-1.5 bg-yellow-400 text-gray-950 text-xs font-black px-3 py-1 rounded-full uppercase mb-2 shadow">
             <Sparkles className="w-3.5 h-3.5 text-purple-900" />
-            <span>Google Gemini 3.8 Flash • AI News Studio</span>
+            <span>AI Gateway Enabled • Multi-Provider Studio</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black font-headline">
             AI न्यूज स्टुडिओ (AI Newsroom Studio)
@@ -159,9 +160,17 @@ export default function AINewsStudioPage() {
           </p>
         </div>
 
-        <div className="bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20 text-xs font-bold flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-green-400" />
-          <span>स्थिती: AI Assisted — Editor Verified</span>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+          <div className="bg-white/10 backdrop-blur-sm px-4 py-2 rounded-xl border border-white/20 text-xs font-bold flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-green-400" />
+            <span>AI Assisted — Editor Verified</span>
+          </div>
+          <Link
+            href="/admin/settings/ai"
+            className="bg-yellow-400 hover:bg-yellow-300 text-gray-950 font-black px-3 py-2 rounded-xl text-xs transition-colors shadow-sm whitespace-nowrap"
+          >
+            ⚙️ AI प्रोव्हायडर बदला &rarr;
+          </Link>
         </div>
       </div>
 
@@ -455,3 +464,4 @@ export default function AINewsStudioPage() {
     </div>
   );
 }
+

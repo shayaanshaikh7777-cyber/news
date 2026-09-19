@@ -9,3 +9,4 @@ export async function GET(req: NextRequest) {
   const ad = await getActiveAdForPlacement({ placement, device });
   return NextResponse.json({ ad });
 }
+

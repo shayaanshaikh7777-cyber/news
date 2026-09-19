@@ -1,4 +1,4 @@
-import prisma from "./prisma";
+import prisma, { isDatabaseAvailable } from "./prisma";
 
 export type AdPlacement =
   | "HEADER"
@@ -19,21 +19,28 @@ export interface GetAdOptions {
 
 export async function getActiveAdForPlacement(options: GetAdOptions) {
   const { placement, device = "ALL", category, location } = options;
-  const now = new Date();
 
-  // Query eligible ads
-  const ads = await prisma.advertisement.findMany({
-    where: {
-      placement,
-      isActive: true,
-      OR: [{ startDate: null }, { startDate: { lte: now } }],
-      AND: [{ OR: [{ endDate: null }, { endDate: { gte: now } }] }],
-    },
-  });
+  try {
+    const isReady = await isDatabaseAvailable();
+    if (!isReady) {
+      return null;
+    }
 
-  if (ads.length === 0) {
-    return null;
-  }
+    const now = new Date();
+
+    // Query eligible ads
+    const ads = await prisma.advertisement.findMany({
+      where: {
+        placement,
+        isActive: true,
+        OR: [{ startDate: null }, { startDate: { lte: now } }],
+        AND: [{ OR: [{ endDate: null }, { endDate: { gte: now } }] }],
+      },
+    });
+
+    if (ads.length === 0) {
+      return null;
+    }
 
   // Filter device if specified
   const filteredAds = ads.filter((ad) => {
@@ -58,11 +65,17 @@ export async function getActiveAdForPlacement(options: GetAdOptions) {
     }
   }
 
-  return filteredAds[0];
+    return filteredAds[0];
+  } catch (err) {
+    console.warn("getActiveAdForPlacement failed, returning null:", err);
+    return null;
+  }
 }
 
 export async function recordAdImpression(adId: string, visitorHash: string) {
   try {
+    if (!(await isDatabaseAvailable())) return;
+
     await prisma.advertisement.update({
       where: { id: adId },
       data: { impressions: { increment: 1 } },
@@ -81,6 +94,8 @@ export async function recordAdImpression(adId: string, visitorHash: string) {
 
 export async function recordAdClick(adId: string, visitorHash: string) {
   try {
+    if (!(await isDatabaseAvailable())) return;
+
     await prisma.advertisement.update({
       where: { id: adId },
       data: { clicks: { increment: 1 } },

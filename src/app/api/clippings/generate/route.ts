@@ -1,27 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { generateClippingImage, ClippingFormat } from "@/lib/clipping-renderer";
+import { FALLBACK_ARTICLES } from "@/lib/fallback-data";
 import fs from "fs";
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const slug = searchParams.get("articleSlug");
-  const format = (searchParams.get("format") || "EPAPER") as ClippingFormat;
-  const exportFormat = (searchParams.get("exportFormat") || "png") as "png" | "webp";
-
-  if (!slug) {
-    return NextResponse.json({ error: "articleSlug is required" }, { status: 400 });
-  }
-
-  const article = await prisma.article.findUnique({
-    where: { slug },
-  });
-
-  if (!article) {
-    return NextResponse.json({ error: "Article not found" }, { status: 404 });
-  }
-
   try {
+    const { searchParams } = new URL(req.url);
+    const slug = searchParams.get("articleSlug");
+    const format = (searchParams.get("format") || "EPAPER") as ClippingFormat;
+    const exportFormat = (searchParams.get("exportFormat") || "png") as "png" | "webp";
+
+    if (!slug) {
+      return NextResponse.json({ error: "articleSlug is required" }, { status: 400 });
+    }
+
+    let article: any = null;
+    try {
+      if (await isDatabaseAvailable()) {
+        article = await prisma.article.findUnique({
+          where: { slug },
+        });
+      }
+    } catch {
+      // Fall through to fallback articles
+    }
+
+    if (!article) {
+      article = FALLBACK_ARTICLES.find((a) => a.slug === slug);
+    }
+
+    if (!article) {
+      return NextResponse.json({ error: "Article not found" }, { status: 404 });
+    }
+
     const { fullPath, relativeUrl } = await generateClippingImage({
       articleId: article.id,
       format,

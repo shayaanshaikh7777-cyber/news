@@ -1,4 +1,4 @@
-import prisma from "./prisma";
+import prisma, { isDatabaseAvailable } from "./prisma";
 
 export async function recordAuditLog(params: {
   userId?: string | null;
@@ -9,6 +9,12 @@ export async function recordAuditLog(params: {
   ipAddress?: string | null;
 }) {
   try {
+    const isReady = await isDatabaseAvailable();
+    if (!isReady) {
+      // In unconfigured or offline database mode, gracefully skip audit log write
+      return null;
+    }
+
     const detailsString =
       typeof params.details === "object" && params.details !== null
         ? JSON.stringify(params.details)
@@ -25,7 +31,7 @@ export async function recordAuditLog(params: {
       },
     });
   } catch (error) {
-    console.error("Failed to record audit log:", error);
+    console.warn("Audit log skipped (database unavailable):", error instanceof Error ? error.message : error);
     return null;
   }
 }

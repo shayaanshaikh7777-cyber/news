@@ -314,3 +314,47 @@ model SiteSetting {
   @@index([key])
 }
 
+model AIProvider {
+  id              String        @id @default(cuid())
+  name            String        // e.g. "Google Gemini 2.5 Flash", "OpenAI GPT-4o-mini", "Groq LLaMA 3.3"
+  providerType    String        // "GEMINI", "OPENAI", "OPENAI_COMPATIBLE"
+  apiKeyEncrypted String
+  model           String        // e.g. "gemini-2.5-flash", "gpt-4o-mini", "llama-3.3-70b-versatile"
+  baseUrl         String?       // for OPENAI_COMPATIBLE or custom endpoints
+  isActive        Boolean       @default(true)
+  isDefault       Boolean       @default(false)
+  temperature     Float         @default(0.2)
+  maxTokens       Int           @default(2048)
+  timeoutMs       Int           @default(30000)
+  lastTestedAt    DateTime?
+  lastTestStatus  String?       // "SUCCESS", "FAILED"
+  lastTestError   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  usageLogs       AIUsageLog[]
+
+  @@index([isActive])
+  @@index([isDefault])
+  @@index([providerType])
+}
+
+model AIUsageLog {
+  id             String      @id @default(cuid())
+  providerId     String?
+  provider       AIProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  providerType   String
+  model          String
+  action         String
+  promptTokens   Int         @default(0)
+  responseTokens Int         @default(0)
+  totalTokens    Int         @default(0)
+  durationMs     Int         @default(0)
+  status         String      // "SUCCESS", "FAILED", "FALLBACK"
+  errorMessage   String?
+  userId         String?
+  createdAt      DateTime    @default(now())
+
+  @@index([providerId])
+  @@index([createdAt])
+}
+

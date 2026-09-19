@@ -37,6 +37,9 @@ yarn-error.log*
 /public/uploads/*
 !/public/uploads/.gitkeep
 
+# TypeScript build cache
+*.tsbuildinfo
+
 # Operating System Files
 .DS_Store
 *.pem

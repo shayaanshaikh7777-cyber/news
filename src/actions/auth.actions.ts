@@ -41,3 +41,4 @@ export async function logoutAction() {
   await logoutUser();
   redirect("/admin/login");
 }
+

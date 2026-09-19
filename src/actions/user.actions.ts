@@ -28,3 +28,4 @@ export async function updateUserRoleAction(userId: string, newRole: Role) {
   revalidatePath("/admin/users");
   return { success: true, user };
 }
+

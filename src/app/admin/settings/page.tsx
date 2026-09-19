@@ -2,6 +2,7 @@ import React from "react";
 import prisma from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { isSuperAdmin } from "@/lib/rbac";
 import { updateSiteSettingsAction } from "@/actions/admin.actions";
 import { Settings, Save, Sparkles, TrendingUp, Megaphone } from "lucide-react";
@@ -65,11 +66,34 @@ export default async function AdminSettingsPage() {
           </div>
         </div>
 
+        {/* AI Gateway & Multi-Provider Banner */}
+        <div className="bg-gradient-to-r from-purple-900 to-indigo-950 text-white p-6 rounded-2xl shadow-sm border border-purple-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-yellow-400 font-bold text-xs uppercase tracking-wider mb-1">
+              <Sparkles className="w-4 h-4" />
+              <span>मल्टी-प्रोव्हायडर AI गेटवे (Multi-Provider AI Gateway)</span>
+            </div>
+            <h3 className="text-lg font-black font-headline text-white">
+              Google Gemini, OpenAI आणि इतर प्रगत मॉडेल्स
+            </h3>
+            <p className="text-xs text-purple-200 mt-1 max-w-xl">
+              नवीन AI Provider व्यवस्थापनाद्वारे आपण OpenAI (GPT-4o), Google Gemini, आणि Groq/DeepSeek सारख्या OpenAI-सुसंगत सेवा सुरक्षित AES-256-GCM एन्क्रिप्शनसह जोडू शकता.
+            </p>
+          </div>
+
+          <Link
+            href="/admin/settings/ai"
+            className="flex items-center gap-2 bg-white hover:bg-gray-100 text-purple-950 font-black px-5 py-2.5 rounded-xl text-xs transition-colors shadow whitespace-nowrap"
+          >
+            <span>AI प्रोव्हायडर्स व्यवस्थापित करा &rarr;</span>
+          </Link>
+        </div>
+
         {/* AI Studio Configuration */}
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-gray-100 text-purple-900 font-bold">
             <Sparkles className="w-4 h-4 text-purple-700" />
-            <span>Google Gemini AI मॉडेल कॉन्फिगरेशन (Configurable AI Model)</span>
+            <span>डिफॉल्ट Gemini मॉडेल आयडी (Legacy Model Setting)</span>
           </div>
 
           <div>
@@ -79,11 +103,11 @@ export default async function AdminSettingsPage() {
             <input
               type="text"
               name="gemini_model"
-              defaultValue={settingsMap["gemini_model"] || "gemini-3.8-flash"}
+              defaultValue={settingsMap["gemini_model"] || "gemini-2.5-flash"}
               className="w-full border border-gray-300 rounded p-2 text-xs font-mono font-bold"
             />
             <p className="text-[11px] text-gray-500 mt-1">
-              अ‍ॅप्लिकेशन कोड बदलल्याशिवाय येथे मॉडेल अपग्रेड करता येते (उदा. `gemini-3.8-flash`, `gemini-3.5-flash-lite`, इ.).
+              टीप: अधिक प्रगत नियंत्रणासाठी व OpenAI जोडण्यासाठी वरील <strong>AI प्रोव्हायडर्स व्यवस्थापित करा</strong> पेज वापरा.
             </p>
           </div>
         </div>
@@ -175,3 +199,4 @@ export default async function AdminSettingsPage() {
     </div>
   );
 }
+

@@ -288,3 +288,4 @@ export default async function NewArticlePage() {
     </div>
   );
 }
+

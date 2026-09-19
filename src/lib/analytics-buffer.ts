@@ -1,4 +1,4 @@
-import prisma from "./prisma";
+import prisma, { isDatabaseAvailable } from "./prisma";
 import crypto from "crypto";
 
 interface ViewEvent {
@@ -22,7 +22,9 @@ class AnalyticsBuffer {
   }
 
   private startFlushTimer() {
-    if (typeof window === "undefined") {
+    // Avoid unfreeze background intervals on serverless platforms (Vercel)
+    const isServerless = process.env.VERCEL === "1" || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+    if (typeof window === "undefined" && !isServerless) {
       this.timer = setInterval(() => {
         this.flush();
       }, this.flushIntervalMs);
@@ -69,6 +71,13 @@ class AnalyticsBuffer {
 
   public async flush() {
     if (this.buffer.length === 0) return;
+
+    const isReady = await isDatabaseAvailable();
+    if (!isReady) {
+      // Clear buffer safely to prevent memory build-up when offline
+      this.buffer = [];
+      return;
+    }
 
     const eventsToFlush = [...this.buffer];
     this.buffer = [];
