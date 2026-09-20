@@ -23,6 +23,10 @@ vi.mock("../src/lib/prisma", async (importOriginal) => {
         findFirst: vi.fn(),
         count: vi.fn(),
       },
+      location: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+      },
       articleRevision: {
         create: vi.fn(),
       },
@@ -296,4 +300,141 @@ describe("P0 Data-Integrity: PostgreSQL User Resolution & Foreign Key Protection
     expect(res.message).toBe("Authenticated user not found. Please sign in again.");
     expect(prisma.mediaAsset.create).not.toHaveBeenCalled();
   });
+
+  // 11. Mobile reporter direct publish by Editor / Super Admin
+  it("allows direct publish from mobile reporter when user has publish permission", async () => {
+    const sessionUser: SessionUser = {
+      id: "cm_real_user_cuid_123",
+      name: "सुनील कांबळे (संपादक)",
+      email: "editor@test.com",
+      role: ROLES.EDITOR,
+    };
+    vi.spyOn(authModule, "getCurrentUser").mockResolvedValue(sessionUser);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(validRealUser as any);
+    vi.mocked(prisma.category.findFirst).mockResolvedValue({
+      id: "cat_local_news",
+      name: "Local",
+      nameMarathi: "स्थानिक",
+      isActive: true,
+    } as any);
+    vi.mocked(prisma.location.findFirst).mockResolvedValue({
+      id: "loc_jamkhed_id",
+      village: "जामखेड शहर",
+      taluka: "जामखेड",
+    } as any);
+    vi.mocked(prisma.article.create).mockResolvedValue({
+      id: "art_mobile_pub_1",
+      headline: "जामखेड बस स्थानकाजवळ नवीन स्वच्छतागृह सुरू",
+      status: "PUBLISHED",
+      publishedById: "cm_real_user_cuid_123",
+      createdById: "cm_real_user_cuid_123",
+    } as any);
+
+    const res = await createMobileReportAction({
+      headline: "जामखेड बस स्थानकाजवळ नवीन स्वच्छतागृह सुरू",
+      notes: "जामखेड शहर बस स्थानक परिसरात प्रवाशांच्या सोयीसाठी नवीन स्वच्छतागृह सुरू करण्यात आले आहे.",
+      locationName: "जामखेड शहर",
+      directPublish: true,
+    });
+
+    expect(res.success).toBe(true);
+    expect(prisma.article.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "PUBLISHED",
+          publishedById: "cm_real_user_cuid_123",
+          publishedAt: expect.any(Date),
+          createdById: "cm_real_user_cuid_123",
+          locationId: "loc_jamkhed_id",
+        }),
+      })
+    );
+  });
+
+  // 12. Mobile reporter direct publish rejected for pure Reporter (RBAC protection)
+  it("rejects direct publish from mobile reporter when user is pure REPORTER without publish role", async () => {
+    const reporterUser = {
+      id: "cm_field_reporter_456",
+      name: "प्रमोद कदम (रिपोर्टर)",
+      email: "reporter@test.com",
+      role: "REPORTER" as const,
+      status: "ACTIVE",
+      avatar: null,
+      reporterProfile: null,
+    };
+    const sessionUser: SessionUser = {
+      id: "cm_field_reporter_456",
+      name: "प्रमोद कदम",
+      email: "reporter@test.com",
+      role: ROLES.REPORTER,
+    };
+    vi.spyOn(authModule, "getCurrentUser").mockResolvedValue(sessionUser);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(reporterUser as any);
+
+    const res = await createMobileReportAction({
+      headline: "अनधिकृत थेट प्रसिद्धी चाचणी",
+      notes: "या बातमीला थेट प्रसिद्ध करण्याची परवानगी नसावी.",
+      directPublish: true,
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toBe(
+      "थेट बातमी प्रसिद्ध करण्याचा अधिकार केवळ मुख्य संपादक किंवा प्रशासकाकडे आहे. कृपया बातमी संपादकांकडे सादर करा."
+    );
+    expect(prisma.article.create).not.toHaveBeenCalled();
+  });
+
+  // 13. Mobile reporter idempotent update with existing articleId
+  it("updates existing article idempotently when articleId is passed in mobile reporter", async () => {
+    const sessionUser: SessionUser = {
+      id: "cm_real_user_cuid_123",
+      name: "सुनील कांबळे",
+      email: "editor@test.com",
+      role: ROLES.EDITOR,
+    };
+    vi.spyOn(authModule, "getCurrentUser").mockResolvedValue(sessionUser);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(validRealUser as any);
+    vi.mocked(prisma.category.findFirst).mockResolvedValue({
+      id: "cat_local_news",
+      isActive: true,
+    } as any);
+    vi.mocked(prisma.article.findUnique).mockResolvedValue({
+      id: "art_existing_mobile_99",
+      headline: "जुने शीर्षक",
+      bodyMarkdown: "जुना मजकूर",
+      createdById: "cm_real_user_cuid_123",
+      status: "SUBMITTED",
+      featuredImage: null,
+    } as any);
+    vi.mocked(prisma.article.update).mockResolvedValue({
+      id: "art_existing_mobile_99",
+      headline: "अपडेटेड शीर्षक",
+      bodyMarkdown: "अपडेटेड मजकूर",
+      status: "PUBLISHED",
+    } as any);
+
+    const res = await createMobileReportAction({
+      articleId: "art_existing_mobile_99",
+      headline: "अपडेटेड शीर्षक",
+      notes: "अपडेटेड मजकूर",
+      directPublish: true,
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.articleId).toBe("art_existing_mobile_99");
+    expect(prisma.article.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "art_existing_mobile_99" },
+        data: expect.objectContaining({
+          headline: "अपडेटेड शीर्षक",
+          bodyMarkdown: "अपडेटेड मजकूर",
+          status: "PUBLISHED",
+          publishedById: "cm_real_user_cuid_123",
+        }),
+      })
+    );
+    // Should NOT create another new article
+    expect(prisma.article.create).not.toHaveBeenCalled();
+  });
 });
+

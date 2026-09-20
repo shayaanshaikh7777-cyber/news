@@ -3,7 +3,7 @@
 import prisma, { isDatabaseAvailable } from "@/lib/prisma";
 import { getCurrentUser, verifyDatabaseUser } from "@/lib/auth";
 import { Article } from "@prisma/client";
-import { isReporter, isEditor, isSuperAdmin, canEditArticle } from "@/lib/rbac";
+import { isReporter, isEditor, isSuperAdmin, canEditArticle, canPublishArticle } from "@/lib/rbac";
 import { transitionArticleStatus, ArticleStatus } from "@/lib/workflow";
 import { ArticleFormSchema, LiveUpdateFormSchema } from "@/schemas/article.schema";
 import { revalidatePath } from "next/cache";
@@ -93,12 +93,15 @@ export async function createAIDraftArticleAction(data: {
 }
 
 export interface MobileReportInput {
+  articleId?: string;
   headline: string;
   notes: string;
   photoUrl?: string;
   youtubeUrl?: string;
   categoryId?: string;
   locationId?: string;
+  locationName?: string;
+  directPublish?: boolean;
 }
 
 export async function createMobileReportAction(data: MobileReportInput): Promise<{
@@ -126,6 +129,14 @@ export async function createMobileReportAction(data: MobileReportInput): Promise
       return { success: false, error: "Authenticated user not found. Please sign in again." };
     }
 
+    const isDirect = !!data.directPublish;
+    if (isDirect && !canPublishArticle(verifiedUser.role)) {
+      return {
+        success: false,
+        error: "थेट बातमी प्रसिद्ध करण्याचा अधिकार केवळ मुख्य संपादक किंवा प्रशासकाकडे आहे. कृपया बातमी संपादकांकडे सादर करा.",
+      };
+    }
+
     let catId = data.categoryId;
     if (catId) {
       const exists = await prisma.category.findUnique({ where: { id: catId } });
@@ -145,9 +156,87 @@ export async function createMobileReportAction(data: MobileReportInput): Promise
       return { success: false, error: "कृपया बातमीसाठी किमान एक विभाग (Category) उपलब्ध असणे आवश्यक आहे." };
     }
 
-    const cleanSlug = `awaaz-mobile-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
+    // Resolve location ID safely (by ID or village name)
+    let locId: string | null = null;
+    if (data.locationId) {
+      const loc = await prisma.location.findUnique({ where: { id: data.locationId } });
+      if (loc) locId = loc.id;
+    }
+    if (!locId && data.locationName) {
+      const loc = await prisma.location.findFirst({
+        where: {
+          OR: [
+            { village: data.locationName },
+            { village: { contains: data.locationName } },
+          ],
+        },
+      });
+      if (loc) locId = loc.id;
+    }
+
     const wordCount = data.notes.split(/\s+/).length;
     const readingTime = Math.max(1, Math.round(wordCount / 150));
+
+    // Idempotent update if articleId is provided
+    if (data.articleId) {
+      const existing = await prisma.article.findUnique({
+        where: { id: data.articleId },
+      });
+
+      if (existing) {
+        if (!canEditArticle(verifiedUser, existing)) {
+          return { success: false, error: "तुम्हाला ही बातमी संपादित करण्याची परवानगी नाही." };
+        }
+
+        const updated = await prisma.article.update({
+          where: { id: existing.id },
+          data: {
+            headline: data.headline.trim(),
+            summary: data.headline.trim().slice(0, 200),
+            bodyMarkdown: data.notes.trim(),
+            featuredImage: data.photoUrl?.trim() || existing.featuredImage || null,
+            youtubeUrl: data.youtubeUrl?.trim() || existing.youtubeUrl || null,
+            categoryId: catId,
+            locationId: locId ?? existing.locationId,
+            ...(isDirect
+              ? {
+                  status: "PUBLISHED",
+                  publishedAt: existing.publishedAt || new Date(),
+                  publishedById: verifiedUser.id,
+                }
+              : {}),
+          },
+        });
+
+        await prisma.articleRevision.create({
+          data: {
+            articleId: updated.id,
+            changedById: verifiedUser.id,
+            changeSummary: isDirect
+              ? "मोबाईल रिपोर्टरद्वारे थेट प्रसिद्ध केले (Direct Publish Update)"
+              : "मोबाईल रिपोर्टरद्वारे अपडेट केले (Mobile Update)",
+            diffData: JSON.stringify(updated),
+          },
+        });
+
+        await recordAuditLog({
+          userId: verifiedUser.id,
+          action: isDirect ? "ARTICLE_PUBLISHED" : "ARTICLE_UPDATED",
+          entity: "Article",
+          entityId: updated.id,
+          details: { headline: updated.headline, source: "MOBILE_REPORTER", directPublish: isDirect },
+        });
+
+        revalidatePath("/admin/articles");
+        revalidatePath("/admin");
+        revalidatePath("/");
+        if (updated.slug) revalidatePath(`/news/${updated.slug}`);
+
+        return { success: true, articleId: updated.id };
+      }
+    }
+
+    const cleanSlug = `awaaz-mobile-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
 
     const article = await prisma.article.create({
       data: {
@@ -157,11 +246,13 @@ export async function createMobileReportAction(data: MobileReportInput): Promise
         featuredImage: data.photoUrl?.trim() || null,
         youtubeUrl: data.youtubeUrl?.trim() || null,
         categoryId: catId,
-        locationId: data.locationId || null,
+        locationId: locId,
         createdById: verifiedUser.id,
         submittedById: verifiedUser.id,
         reporterId: verifiedUser.reporterProfileId || null,
-        status: "SUBMITTED",
+        status: isDirect ? "PUBLISHED" : "SUBMITTED",
+        publishedAt: isDirect ? new Date() : null,
+        publishedById: isDirect ? verifiedUser.id : null,
         slug: cleanSlug,
         readingTimeMinutes: readingTime,
         priority: 0,
@@ -169,16 +260,30 @@ export async function createMobileReportAction(data: MobileReportInput): Promise
       },
     });
 
+    await prisma.articleRevision.create({
+      data: {
+        articleId: article.id,
+        changedById: verifiedUser.id,
+        changeSummary: isDirect
+          ? "मोबाईल रिपोर्टरद्वारे थेट प्रसिद्ध केले (Direct Publish)"
+          : "मोबाईल रिपोर्टरद्वारे सादर केले (Mobile Submission)",
+        diffData: JSON.stringify(article),
+      },
+    });
+
     await recordAuditLog({
       userId: verifiedUser.id,
-      action: "ARTICLE_CREATED",
+      action: isDirect ? "ARTICLE_PUBLISHED" : "ARTICLE_CREATED",
       entity: "Article",
       entityId: article.id,
-      details: { headline: article.headline, source: "MOBILE_REPORTER" },
+      details: { headline: article.headline, source: "MOBILE_REPORTER", directPublish: isDirect },
     });
 
     revalidatePath("/admin/articles");
     revalidatePath("/admin");
+    revalidatePath("/");
+    if (article.slug) revalidatePath(`/news/${article.slug}`);
+
     return { success: true, articleId: article.id };
   } catch (err: unknown) {
     console.error("[createMobileReportAction error]", err);

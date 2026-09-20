@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createMobileReportAction } from "@/actions/article.actions";
+import { uploadAndOptimizeMediaAction } from "@/actions/media.actions";
 import {
   Mic,
   MicOff,
@@ -14,85 +15,291 @@ import {
   CheckCircle2,
   AlertCircle,
   Video,
+  Upload,
+  Trash2,
+  RefreshCw,
+  Rocket,
+  Loader2,
+  X,
+  Globe,
 } from "lucide-react";
+
+interface ISpeechRecognitionResult {
+  transcript: string;
+  confidence: number;
+}
+
+interface ISpeechRecognitionResultList {
+  length: number;
+  [index: number]: {
+    length: number;
+    [index: number]: ISpeechRecognitionResult;
+    isFinal: boolean;
+  };
+}
+
+interface ISpeechRecognitionEvent {
+  resultIndex: number;
+  results: ISpeechRecognitionResultList;
+}
+
+interface ISpeechRecognitionErrorEvent {
+  error: string;
+  message?: string;
+}
+
+interface ISpeechRecognitionInstance {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: ISpeechRecognitionEvent) => void) | null;
+  onerror: ((event: ISpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => ISpeechRecognitionInstance;
+
+function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
+  if (typeof window === "undefined") return null;
+  const win = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return win.SpeechRecognition || win.webkitSpeechRecognition || null;
+}
 
 export default function MobileReporterPage() {
   const router = useRouter();
 
   const [headline, setHeadline] = useState("");
   const [notes, setNotes] = useState("");
-  const [location, setLocation] = useState("जामखेड");
+  const [location, setLocation] = useState("जामखेड शहर");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
 
   const [isRecording, setIsRecording] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("व्हॉइस इनपुट सुरू करा");
+  const [interimTranscript, setInterimTranscript] = useState("");
   const [aiProcessing, setAiProcessing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [showManualUrl, setShowManualUrl] = useState(false);
 
-  // Web Speech API for voice-to-news in Marathi/Hindi
+  // Speech recognition controller refs
+  const recognitionRef = useRef<ISpeechRecognitionInstance | null>(null);
+  const shouldContinueRecognitionRef = useRef<boolean>(false);
+  const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentInterimRef = useRef<string>("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const lastCreatedArticleIdRef = useRef<string | null>(null);
+
+  // Check speech recognition capability on mount
   useEffect(() => {
-    // Check speech recognition
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setVoiceStatus("ब्राउझर व्हॉइस रेकग्निशन उपलब्ध नाही");
+    const SR = getSpeechRecognitionConstructor();
+    if (!SR) {
+      setVoiceStatus("ब्राउझर व्हॉइस रेकग्निशन उपलब्ध नाही (मजकूर टाईप करा)");
     }
+
+    return () => {
+      // Cleanup any active speech session on unmount
+      shouldContinueRecognitionRef.current = false;
+      if (restartTimeoutRef.current) {
+        clearTimeout(restartTimeoutRef.current);
+      }
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+      }
+    };
   }, []);
 
-  const toggleVoiceRecording = () => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  const startRecognitionSession = () => {
+    const SR = getSpeechRecognitionConstructor();
+    if (!SR) return;
 
-    if (!SpeechRecognition) {
+    try {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+      }
+
+      const recognition = new SR();
+      recognition.lang = "mr-IN"; // Marathi recognition
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        if (shouldContinueRecognitionRef.current) {
+          setIsRecording(true);
+          setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला (थांबवण्यासाठी बटण दाबा)");
+        }
+      };
+
+      recognition.onresult = (event: ISpeechRecognitionEvent) => {
+        if (!shouldContinueRecognitionRef.current) return;
+
+        let finalChunk = "";
+        let interimChunk = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const res = event.results[i];
+          const text = res[0]?.transcript || "";
+          if (res.isFinal) {
+            finalChunk += text + " ";
+          } else {
+            interimChunk += text;
+          }
+        }
+
+        // Only append finalized speech chunks once
+        if (finalChunk.trim()) {
+          const cleanFinal = finalChunk.trim();
+          setNotes((prev) => {
+            const base = prev.trim();
+            return base ? `${base} ${cleanFinal}` : cleanFinal;
+          });
+          currentInterimRef.current = "";
+          setInterimTranscript("");
+        }
+
+        if (interimChunk) {
+          currentInterimRef.current = interimChunk;
+          setInterimTranscript(interimChunk);
+        } else if (!finalChunk.trim()) {
+          currentInterimRef.current = "";
+          setInterimTranscript("");
+        }
+      };
+
+      recognition.onerror = (e: ISpeechRecognitionErrorEvent) => {
+        if (!shouldContinueRecognitionRef.current) return;
+
+        // "no-speech" triggers during speech pauses — DO NOT stop recording
+        if (e.error === "no-speech") {
+          setVoiceStatus("बोलण्याची वाट पाहत आहे... (माईक सक्रिय आहे)");
+          return;
+        }
+
+        if (e.error === "aborted") {
+          return;
+        }
+
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          shouldContinueRecognitionRef.current = false;
+          setIsRecording(false);
+          setVoiceStatus("मायक्रोफोन परवानगी नाकारली. कृपया ब्राऊझर सेटिंग्ज तपासा.");
+          return;
+        }
+
+        console.warn("Speech recognition warning:", e.error);
+      };
+
+      recognition.onend = () => {
+        // If unfinalized interim speech remains when instance ends, commit it cleanly
+        if (currentInterimRef.current.trim()) {
+          const remaining = currentInterimRef.current.trim();
+          setNotes((prev) => {
+            const base = prev.trim();
+            return base ? `${base} ${remaining}` : remaining;
+          });
+          currentInterimRef.current = "";
+          setInterimTranscript("");
+        }
+
+        // If user has not clicked stop, safely auto-restart to survive natural pauses
+        if (shouldContinueRecognitionRef.current) {
+          setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... (सक्रिय)");
+          if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+          restartTimeoutRef.current = setTimeout(() => {
+            if (shouldContinueRecognitionRef.current) {
+              try {
+                startRecognitionSession();
+              } catch (err) {
+                console.error("Speech restart error:", err);
+              }
+            }
+          }, 150);
+        } else {
+          setIsRecording(false);
+          setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Recognition start error:", err);
+      if (shouldContinueRecognitionRef.current) {
+        restartTimeoutRef.current = setTimeout(() => {
+          if (shouldContinueRecognitionRef.current) startRecognitionSession();
+        }, 300);
+      }
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    shouldContinueRecognitionRef.current = false;
+    if (restartTimeoutRef.current) {
+      clearTimeout(restartTimeoutRef.current);
+      restartTimeoutRef.current = null;
+    }
+
+    // Commit any active interim text before stopping
+    if (currentInterimRef.current.trim()) {
+      const remaining = currentInterimRef.current.trim();
+      setNotes((prev) => {
+        const base = prev.trim();
+        return base ? `${base} ${remaining}` : remaining;
+      });
+      currentInterimRef.current = "";
+    }
+    setInterimTranscript("");
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+    }
+
+    setIsRecording(false);
+    setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
+  };
+
+  const toggleVoiceRecording = () => {
+    const SR = getSpeechRecognitionConstructor();
+    if (!SR) {
       alert("आपला ब्राउझर थेट स्पीच-टू-टेक्स्टला सपोर्ट करत नाही. कृपया मजकूर टाईप करा.");
       return;
     }
 
     if (isRecording) {
-      setIsRecording(false);
-      setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
+      stopVoiceRecording();
     } else {
-      try {
-        const recognition = new SpeechRecognition();
-        recognition.lang = "mr-IN"; // Marathi recognition
-        recognition.continuous = true;
-        recognition.interimResults = true;
-
-        recognition.onstart = () => {
-          setIsRecording(true);
-          setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला");
-        };
-
-        recognition.onresult = (event: any) => {
-          let transcript = "";
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            transcript += event.results[i][0].transcript;
-          }
-          setNotes((prev) => `${prev} ${transcript}`.trim());
-        };
-
-        recognition.onerror = (e: any) => {
-          console.error("Speech recognition error:", e);
-          setIsRecording(false);
-          setVoiceStatus("व्हॉइस इनपुट थांबले");
-        };
-
-        recognition.onend = () => {
-          setIsRecording(false);
-          setVoiceStatus("व्हॉइस इनपुट पूर्ण झाले");
-        };
-
-        recognition.start();
-      } catch (err) {
-        console.error(err);
-        setIsRecording(false);
-      }
+      shouldContinueRecognitionRef.current = true;
+      setIsRecording(true);
+      setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला (थांबवण्यासाठी बटण दाबा)");
+      setInterimTranscript("");
+      currentInterimRef.current = "";
+      startRecognitionSession();
     }
   };
 
+  // AI cleanup and auto-drafting
   const handleAICleanup = async () => {
     if (!notes.trim()) {
       alert("कृपया आधी व्हॉइस रेकॉर्डिंग करा किंवा कच्च्या नोंदी टाईप करा.");
@@ -101,6 +308,7 @@ export default function MobileReporterPage() {
 
     setAiProcessing(true);
     setMessage("");
+    setErrorMessage("");
 
     try {
       const res = await fetch("/api/ai/studio", {
@@ -119,49 +327,129 @@ export default function MobileReporterPage() {
         setHeadline(json.data.headline);
         setNotes(json.data.body_markdown);
         setMessage("✅ AI द्वारे बातमीचा मसुदा तयार झाला आहे!");
+      } else {
+        setErrorMessage(json.error || "AI मसुदा तयार करताना त्रुटी आली.");
       }
     } catch {
-      alert("AI प्रक्रिया करताना त्रुटी आली.");
+      setErrorMessage("AI प्रक्रिया करताना तांत्रिक अडचण आली.");
     } finally {
       setAiProcessing(false);
     }
   };
 
-  const handleSubmitToEditor = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Photo upload using uploadAndOptimizeMediaAction
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 25 * 1024 * 1024) {
+      alert("कृपया 25 MB पेक्षा कमी आकाराची इमेज निवडा.");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    setMessage("");
+    setErrorMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("format", "webp");
+      formData.append("altText", headline || `मोबाइल बातमी फोटो - ${location}`);
+
+      const res = await uploadAndOptimizeMediaAction(formData);
+      if (res.success && res.assets && res.assets.length > 0) {
+        setPhotoUrl(res.assets[0].url);
+        setMessage("✅ फोटो यशस्वीरीत्या अपलोड व ऑप्टिमाइझ झाला!");
+      } else {
+        setErrorMessage(res.message || "फोटो अपलोड करताना त्रुटी आली.");
+      }
+    } catch (err) {
+      console.error("Photo upload error:", err);
+      setErrorMessage("फोटो अपलोड करताना तांत्रिक अडचण आली.");
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoUrl("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // Submit report handler (handles both Editor Submission and Direct Publish)
+  const submitReport = async (directPublish: boolean) => {
     if (!headline.trim() || !notes.trim()) {
       alert("कृपया बातमीचे शीर्षक आणि मजकूर दोन्ही भरा.");
       return;
     }
 
+    // Stop recording if active before submitting
+    if (isRecording) {
+      stopVoiceRecording();
+    }
+
     setSubmitting(true);
     setMessage("");
+    setErrorMessage("");
 
     try {
       const res = await createMobileReportAction({
+        articleId: lastCreatedArticleIdRef.current || undefined,
         headline: headline.trim(),
         notes: notes.trim(),
         photoUrl: photoUrl.trim() || undefined,
         youtubeUrl: youtubeUrl.trim() || undefined,
+        locationName: location,
+        directPublish,
       });
 
       if (res.success) {
-        setMessage("✅ बातमी यशस्वीरीत्या मुख्य संपादकांकडे पुनरावलोकनासाठी पाठवली गेली आहे!");
+        if (res.articleId) {
+          lastCreatedArticleIdRef.current = res.articleId;
+        }
+
+        if (directPublish) {
+          setMessage("🚀 बातमी पोर्टलवर थेट प्रसिद्ध (Live) झाली आहे!");
+        } else {
+          setMessage("✅ बातमी यशस्वीरीत्या मुख्य संपादकांकडे पुनरावलोकनासाठी पाठवली गेली आहे!");
+        }
+
         setTimeout(() => {
           router.push("/admin/articles");
-        }, 2000);
+        }, 1800);
       } else {
-        setMessage(res.error || "सबमिट करताना त्रुटी आली.");
+        setErrorMessage(res.error || "सबमिट करताना त्रुटी आली.");
       }
-    } catch {
-      setMessage("सबमिट करताना त्रुटी आली.");
+    } catch (err) {
+      console.error("Submit report error:", err);
+      setErrorMessage("बातमी पाठवताना तांत्रिक त्रुटी आली.");
     } finally {
       setSubmitting(false);
+      setShowPublishModal(false);
     }
   };
 
+  const handleSubmitToEditor = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitReport(false);
+  };
+
+  const handleDirectPublishClick = () => {
+    if (!headline.trim() || !notes.trim()) {
+      alert("कृपया बातमीचे शीर्षक आणि मजकूर दोन्ही भरा.");
+      return;
+    }
+    setShowPublishModal(true);
+  };
+
   return (
-    <div className="max-w-xl mx-auto space-y-4 font-marathi">
+    <div className="max-w-xl mx-auto space-y-4 font-marathi pb-10">
       {/* Mobile Reporter Masthead */}
       <div className="bg-red-950 text-white p-5 rounded-2xl border border-red-800 shadow-sm flex items-center justify-between">
         <div>
@@ -173,30 +461,40 @@ export default function MobileReporterPage() {
           </h1>
         </div>
 
-        <div className="w-10 h-10 rounded-full bg-red-800 flex items-center justify-center text-white">
+        <div className="w-10 h-10 rounded-full bg-red-800 flex items-center justify-center text-white shadow-inner">
           <Camera className="w-5 h-5" />
         </div>
       </div>
 
+      {/* Success Notification */}
       {message && (
-        <div className="p-3 bg-green-50 text-green-900 border border-green-200 rounded-xl text-xs font-bold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+        <div className="p-3.5 bg-green-50 text-green-900 border border-green-200 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
           <span>{message}</span>
+        </div>
+      )}
+
+      {/* Error Notification */}
+      {errorMessage && (
+        <div className="p-3.5 bg-red-50 text-red-900 border border-red-200 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 animate-in fade-in">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+          <span>{errorMessage}</span>
         </div>
       )}
 
       {/* Voice-to-News Card */}
       <div className="bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white p-5 rounded-2xl shadow-md text-center">
-        <p className="text-xs text-red-200 font-semibold mb-2">
+        <p className="text-xs text-red-200 font-semibold mb-3">
           व्हॉइस-टू-न्यूज (Voice-to-News Pipeline):
         </p>
 
         <button
           type="button"
           onClick={toggleVoiceRecording}
+          title={isRecording ? "रेकॉर्डिंग थांबवा" : "रेकॉर्डिंग सुरू करा"}
           className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center shadow-lg transition-transform active:scale-95 ${
             isRecording
-              ? "bg-red-500 animate-ping ring-4 ring-white"
+              ? "bg-red-500 ring-4 ring-red-300 animate-pulse text-white"
               : "bg-white text-red-900 hover:bg-gray-100"
           }`}
         >
@@ -204,18 +502,35 @@ export default function MobileReporterPage() {
         </button>
 
         <p className="text-xs font-bold text-white mt-3">{voiceStatus}</p>
-        <p className="text-[11px] text-red-200 mt-0.5">
-          मराठी, हिंदी किंवा इंग्रजीत बोला — AI आपोआप बातमी तयार करेल.
+
+        {/* Live speech preview to avoid duplicating into notes */}
+        {interimTranscript && (
+          <div className="mt-2.5 px-3 py-1.5 bg-red-950/70 border border-red-700/50 rounded-lg text-xs text-yellow-200 italic max-h-16 overflow-y-auto">
+            🔴 ऐकत आहे: &ldquo;{interimTranscript}&rdquo;
+          </div>
+        )}
+
+        <p className="text-[11px] text-red-200 mt-1.5">
+          मराठी, हिंदी किंवा इंग्रजीत बोला — तुम्ही विचार करताना थांबला तरी माईक चालू राहील.
         </p>
 
         <button
           type="button"
           onClick={handleAICleanup}
           disabled={aiProcessing}
-          className="mt-4 inline-flex items-center gap-1.5 bg-yellow-400 hover:bg-yellow-300 text-gray-950 font-black px-4 py-2 rounded-xl text-xs shadow transition-all"
+          className="mt-4 inline-flex items-center gap-1.5 bg-yellow-400 hover:bg-yellow-300 text-gray-950 font-black px-4 py-2 rounded-xl text-xs shadow transition-all disabled:opacity-60"
         >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>{aiProcessing ? "AI प्रक्रिया करत आहे..." : "AI क्लीनअप व ड्राफ्ट बनवा"}</span>
+          {aiProcessing ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>AI प्रक्रिया करत आहे...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>AI क्लीनअप व ड्राफ्ट बनवा</span>
+            </>
+          )}
         </button>
       </div>
 
@@ -224,9 +539,10 @@ export default function MobileReporterPage() {
         onSubmit={handleSubmitToEditor}
         className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4 text-xs sm:text-sm"
       >
+        {/* Headline */}
         <div>
           <label className="block font-bold text-gray-800 mb-1">
-            बातमीचे शीर्षक (Headline):
+            बातमीचे शीर्षक (Headline): <span className="text-red-600">*</span>
           </label>
           <input
             type="text"
@@ -234,18 +550,20 @@ export default function MobileReporterPage() {
             value={headline}
             onChange={(e) => setHeadline(e.target.value)}
             placeholder="उदा. खर्डा येथे अचानक वीज पुरवठा खंडित, व्यापारी आक्रमक"
-            className="w-full border border-gray-300 rounded-lg p-2.5 font-bold text-gray-900 focus:ring-2 focus:ring-red-700"
+            className="w-full border border-gray-300 rounded-lg p-2.5 font-bold text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none"
           />
         </div>
 
+        {/* Location Selector */}
         <div>
-          <label className="block font-bold text-gray-800 mb-1">
-            घटनेचे स्थान (Village / Location):
+          <label className="block font-bold text-gray-800 mb-1 flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 text-red-700" />
+            <span>घटनेचे स्थान (Village / Location):</span>
           </label>
           <select
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg p-2.5 font-semibold text-gray-800 bg-gray-50"
+            className="w-full border border-gray-300 rounded-lg p-2.5 font-semibold text-gray-800 bg-gray-50 focus:ring-2 focus:ring-red-700 focus:outline-none"
           >
             <option value="जामखेड शहर">जामखेड शहर</option>
             <option value="खर्डा">खर्डा</option>
@@ -254,13 +572,19 @@ export default function MobileReporterPage() {
             <option value="नानज">नानज</option>
             <option value="सावरगाव">सावरगाव</option>
             <option value="जवळके">जवळके</option>
-            <option value="कर्जत">कर्जत</option>
+            <option value="राजुरी">राजुरी</option>
+            <option value="मोहा">मोहा</option>
+            <option value="साकत">साकत</option>
+            <option value="दिघोळ">दिघोळ</option>
+            <option value="कर्जत शहर">कर्जत शहर</option>
+            <option value="राशीन">राशीन</option>
           </select>
         </div>
 
+        {/* Notes / Body */}
         <div>
           <label className="block font-bold text-gray-800 mb-1">
-            कच्च्या नोंदी किंवा बातमीचा मसुदा:
+            कच्च्या नोंदी किंवा बातमीचा मसुदा: <span className="text-red-600">*</span>
           </label>
           <textarea
             rows={6}
@@ -268,50 +592,208 @@ export default function MobileReporterPage() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="घटनेचा तपशील, प्रत्यक्षदर्शींची नावे, वेळ आणि महत्त्वाचे मुद्दे..."
-            className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 focus:ring-2 focus:ring-red-700 leading-relaxed"
+            className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
           />
         </div>
 
-        {/* Camera / Photo URL Input */}
-        <div>
-          <label className="block font-bold text-gray-800 mb-1">
-            घटनेचा फोटो (Photo URL / Camera):
+        {/* Photo Upload & Preview Section */}
+        <div className="space-y-2">
+          <label className="block font-bold text-gray-800 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <ImageIcon className="w-4 h-4 text-red-700" />
+              <span>घटनेचा फोटो (Photo / Camera):</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowManualUrl((prev) => !prev)}
+              className="text-[11px] font-semibold text-red-700 hover:underline flex items-center gap-1"
+            >
+              <Globe className="w-3 h-3" />
+              <span>{showManualUrl ? "URL लपवा" : "URL टाका"}</span>
+            </button>
           </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="url"
-              value={photoUrl}
-              onChange={(e) => setPhotoUrl(e.target.value)}
-              placeholder="https://... किंवा कॅमेऱ्याने घेतलेला फोटो"
-              className="flex-1 border border-gray-300 rounded-lg p-2 text-xs"
-            />
-          </div>
+
+          {/* Hidden File Input supporting mobile camera & gallery */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            onChange={handlePhotoUpload}
+            className="hidden"
+          />
+
+          {/* Compact Photo Preview Card */}
+          {photoUrl ? (
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center gap-3">
+              <img
+                src={photoUrl}
+                alt="अपलोड केलेला फोटो"
+                className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg border border-gray-300 flex-shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-xs mb-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>फोटो तयार आहे</span>
+                </div>
+                <p className="text-[11px] text-gray-500 truncate" title={photoUrl}>
+                  {photoUrl}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingPhoto}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-gray-300 rounded-lg text-[11px] font-bold text-gray-700 hover:bg-gray-100 transition shadow-xs"
+                  >
+                    <RefreshCw className="w-3 h-3 text-gray-600" />
+                    <span>फोटो बदला</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    disabled={uploadingPhoto}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-red-200 rounded-lg text-[11px] font-bold text-red-600 hover:bg-red-50 transition shadow-xs"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>फोटो काढा</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="flex-1 py-3 px-4 bg-red-50 hover:bg-red-100 text-red-900 border border-red-200 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition active:scale-[0.99] disabled:opacity-60"
+              >
+                {uploadingPhoto ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-red-700" />
+                    <span>फोटो अपलोड होत आहे...</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera className="w-4 h-4 text-red-700" />
+                    <span>📷 फोटो अपलोड करा (कॅमेरा / गॅलरी)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Manual URL Input Option */}
+          {showManualUrl && (
+            <div className="pt-1">
+              <input
+                type="url"
+                value={photoUrl}
+                onChange={(e) => setPhotoUrl(e.target.value)}
+                placeholder="https://... किंवा वेब फोटो लिंक टाका"
+                className="w-full border border-gray-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-red-700 focus:outline-none"
+              />
+            </div>
+          )}
         </div>
 
         {/* YouTube Video URL */}
         <div>
-          <label className="block font-bold text-gray-800 mb-1">
-            थेट व्हिडिओ लिंक (YouTube / Shorts):
+          <label className="block font-bold text-gray-800 mb-1 flex items-center gap-1.5">
+            <Video className="w-4 h-4 text-red-700" />
+            <span>थेट व्हिडिओ लिंक (YouTube / Shorts):</span>
           </label>
           <input
             type="url"
             value={youtubeUrl}
             onChange={(e) => setYoutubeUrl(e.target.value)}
             placeholder="https://youtube.com/..."
-            className="w-full border border-gray-300 rounded-lg p-2 text-xs"
+            className="w-full border border-gray-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-red-700 focus:outline-none"
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full bg-red-800 hover:bg-red-700 text-white font-black py-3 rounded-xl transition-all shadow-md text-sm flex items-center justify-center gap-2"
-        >
-          <Send className="w-4 h-4" />
-          <span>{submitting ? "सादर करत आहे..." : "संपादकांकडे सादर करा (Submit to Editor)"}</span>
-        </button>
+        {/* Action Buttons: Submit to Editor + Direct Publish */}
+        <div className="pt-3 space-y-2.5">
+          {/* Submit to Editor */}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-red-800 hover:bg-red-700 text-white font-black py-3 rounded-xl transition-all shadow-md text-xs sm:text-sm flex items-center justify-center gap-2 disabled:opacity-60 active:scale-[0.99]"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>सादर करत आहे...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />
+                <span>✈️ संपादकांकडे सादर करा (Submit to Editor)</span>
+              </>
+            )}
+          </button>
+
+          {/* Direct Publish Button */}
+          <button
+            type="button"
+            onClick={handleDirectPublishClick}
+            disabled={submitting}
+            className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-black py-3 rounded-xl transition-all shadow-md text-xs sm:text-sm flex items-center justify-center gap-2 disabled:opacity-60 active:scale-[0.99]"
+          >
+            <Rocket className="w-4 h-4" />
+            <span>🚀 थेट प्रसिद्ध करा (Direct Publish)</span>
+          </button>
+        </div>
       </form>
+
+      {/* Direct Publish Confirmation Modal */}
+      {showPublishModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-inner">
+              <Rocket className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-black text-gray-900">
+                थेट बातमी प्रसिद्धी (Direct Publish)
+              </h3>
+              <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                हा रिपोर्ट थेट प्रसिद्ध करायचा आहे का? ही बातमी पोर्टलवर तात्काळ सर्व वाचकांसाठी प्रसिद्ध (Live) होईल.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowPublishModal(false)}
+                disabled={submitting}
+                className="flex-1 py-2.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl font-bold text-xs transition"
+              >
+                रद्द करा
+              </button>
+              <button
+                type="button"
+                onClick={() => submitReport(true)}
+                disabled={submitting}
+                className="flex-1 py-2.5 px-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs transition shadow flex items-center justify-center gap-1.5 disabled:opacity-60"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>प्रसिद्ध करत आहे...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>होय, प्रसिद्ध करा</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
