@@ -81,7 +81,6 @@ export default function MobileReporterPage() {
 
   const [isMicOn, setIsMicOn] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("व्हॉइस इनपुट सुरू करा");
-  const [interimTranscript, setInterimTranscript] = useState("");
   const [aiProcessing, setAiProcessing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -90,17 +89,13 @@ export default function MobileReporterPage() {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showManualUrl, setShowManualUrl] = useState(false);
 
-  // Transcript state sources of truth
-  const committedTranscriptRef = useRef<string>("");
-  const sessionFinalTranscriptRef = useRef<string>("");
-  const sessionInterimTranscriptRef = useRef<string>("");
-
   // Recognition session & lifecycle controller refs
   const sessionIdRef = useRef<number>(0);
   const recognitionRef = useRef<ISpeechRecognitionInstance | null>(null);
   const isRecognitionRunningRef = useRef<boolean>(false);
   const shouldKeepListeningRef = useRef<boolean>(false);
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const processedIndicesRef = useRef<Set<number>>(new Set());
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastCreatedArticleIdRef = useRef<string | null>(null);
@@ -131,24 +126,6 @@ export default function MobileReporterPage() {
     };
   }, []);
 
-  // Reconstructs and displays: committedTranscript + sessionFinal + sessionInterim
-  const updateDisplayText = () => {
-    const committed = committedTranscriptRef.current.trim();
-    const sessionFinal = sessionFinalTranscriptRef.current.trim();
-    const sessionInterim = sessionInterimTranscriptRef.current.trim();
-
-    let text = committed;
-    if (sessionFinal) {
-      text = text ? `${text} ${sessionFinal}` : sessionFinal;
-    }
-    if (sessionInterim) {
-      text = text ? `${text} ${sessionInterim}` : sessionInterim;
-    }
-
-    setNotes(text);
-    setInterimTranscript(sessionInterim);
-  };
-
   // Creates and starts a new recognition session with generation/session token guard
   const startNewRecognitionSession = () => {
     const SR = getSpeechRecognitionConstructor();
@@ -157,10 +134,8 @@ export default function MobileReporterPage() {
     // Invalidate any previous session so late callbacks are discarded
     const sessionId = ++sessionIdRef.current;
 
-    // Reset this session's temporary transcript buffers
-    sessionFinalTranscriptRef.current = "";
-    sessionInterimTranscriptRef.current = "";
-    setInterimTranscript("");
+    // Reset this session's processed index guard
+    processedIndicesRef.current.clear();
 
     // Abort prior instance cleanly if one exists
     if (recognitionRef.current) {
@@ -177,7 +152,7 @@ export default function MobileReporterPage() {
       const recognition = new SR();
       recognition.lang = "mr-IN"; // Marathi speech recognition
       recognition.continuous = true;
-      recognition.interimResults = true;
+      recognition.interimResults = false;
 
       recognition.onstart = () => {
         if (sessionId !== sessionIdRef.current) return;
@@ -192,27 +167,25 @@ export default function MobileReporterPage() {
         if (sessionId !== sessionIdRef.current) return;
         if (!shouldKeepListeningRef.current) return;
 
-        // Session-based transcript reconstruction:
-        // Reconstruct the full transcript for THIS session from event.results
-        let sessionFinal = "";
-        let sessionInterim = "";
+        // Process only newly received result indices
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (processedIndicesRef.current.has(i)) continue;
 
-        for (let i = 0; i < event.results.length; i++) {
           const result = event.results[i];
-          const transcript = result[0]?.transcript?.trim() || "";
+          if (!result || !result.isFinal) continue;
+
+          const transcript = result[0]?.transcript?.trim();
           if (!transcript) continue;
 
-          if (result.isFinal) {
-            sessionFinal += transcript + " ";
-          } else {
-            sessionInterim += transcript + " ";
-          }
+          // Guard against processing the same index twice in this session
+          processedIndicesRef.current.add(i);
+
+          // Authoritative single commit path directly into textarea state
+          setNotes((prev) => {
+            const base = prev.trim();
+            return base ? `${base} ${transcript}` : transcript;
+          });
         }
-
-        sessionFinalTranscriptRef.current = sessionFinal.trim();
-        sessionInterimTranscriptRef.current = sessionInterim.trim();
-
-        updateDisplayText();
       };
 
       recognition.onerror = (e: ISpeechRecognitionErrorEvent) => {
@@ -244,22 +217,8 @@ export default function MobileReporterPage() {
         if (sessionId !== sessionIdRef.current) return;
         isRecognitionRunningRef.current = false;
 
-        // 1. Commit ONLY this session's final transcript into committedTranscriptRef
-        const sessionFinal = sessionFinalTranscriptRef.current.trim();
-        if (sessionFinal) {
-          const committed = committedTranscriptRef.current.trim();
-          committedTranscriptRef.current = committed ? `${committed} ${sessionFinal}` : sessionFinal;
-        }
-
-        // 2. Clear temporary session state and interim
-        sessionFinalTranscriptRef.current = "";
-        sessionInterimTranscriptRef.current = "";
-        setInterimTranscript("");
-
-        // Update textarea to show only the committed transcript
-        setNotes(committedTranscriptRef.current);
-
-        // 3. If user still wants Mic ON, automatically start next session
+        // IMPORTANT: onend does NOT commit or touch text to avoid duplicates.
+        // It only restarts recognition if the mic is logically active.
         if (shouldKeepListeningRef.current) {
           setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... (सक्रिय)");
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
@@ -315,20 +274,7 @@ export default function MobileReporterPage() {
       }
       isRecognitionRunningRef.current = false;
 
-      // Commit finalized session text (if any)
-      const sessionFinal = sessionFinalTranscriptRef.current.trim();
-      if (sessionFinal) {
-        const committed = committedTranscriptRef.current.trim();
-        committedTranscriptRef.current = committed ? `${committed} ${sessionFinal}` : sessionFinal;
-      }
-
-      // Discard interim
-      sessionFinalTranscriptRef.current = "";
-      sessionInterimTranscriptRef.current = "";
-      setInterimTranscript("");
-
-      setNotes(committedTranscriptRef.current);
-
+      // Do NOT touch or re-commit notes here — text is already committed authoritatively in onresult
       setIsMicOn(false);
       setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
     } else {
@@ -338,12 +284,6 @@ export default function MobileReporterPage() {
         alert("आपला ब्राउझर थेट स्पीच-टू-टेक्स्टला सपोर्ट करत नाही. कृपया मजकूर टाईप करा.");
         return;
       }
-
-      // Preserve whatever is currently in notes (including manual edits) as the committed base
-      committedTranscriptRef.current = notes.trim();
-      sessionFinalTranscriptRef.current = "";
-      sessionInterimTranscriptRef.current = "";
-      setInterimTranscript("");
 
       shouldKeepListeningRef.current = true;
       setIsMicOn(true);
@@ -380,9 +320,6 @@ export default function MobileReporterPage() {
       if (res.ok && json.data) {
         setHeadline(json.data.headline);
         setNotes(json.data.body_markdown);
-        committedTranscriptRef.current = json.data.body_markdown;
-        sessionFinalTranscriptRef.current = "";
-        sessionInterimTranscriptRef.current = "";
         setMessage("✅ AI द्वारे बातमीचा मसुदा तयार झाला आहे!");
       } else {
         setErrorMessage(json.error || "AI मसुदा तयार करताना त्रुटी आली.");
@@ -561,12 +498,6 @@ export default function MobileReporterPage() {
 
         <p className="text-xs font-bold text-white mt-3">{voiceStatus}</p>
 
-        {/* Live speech interim preview */}
-        {interimTranscript && (
-          <div className="mt-2.5 px-3 py-1.5 bg-red-950/70 border border-red-700/50 rounded-lg text-xs text-yellow-200 italic max-h-16 overflow-y-auto">
-            🔴 ऐकत आहे: &ldquo;{interimTranscript}&rdquo;
-          </div>
-        )}
 
         <p className="text-[11px] text-red-200 mt-1.5">
           मराठी, हिंदी किंवा इंग्रजीत बोला — तुम्ही विचार करताना थांबला तरी माईक चालू राहील.
@@ -649,12 +580,7 @@ export default function MobileReporterPage() {
             rows={6}
             required
             value={notes}
-            onChange={(e) => {
-              setNotes(e.target.value);
-              committedTranscriptRef.current = e.target.value;
-              sessionFinalTranscriptRef.current = "";
-              sessionInterimTranscriptRef.current = "";
-            }}
+            onChange={(e) => setNotes(e.target.value)}
             placeholder="घटनेचा तपशील, प्रत्यक्षदर्शींची नावे, वेळ आणि महत्त्वाचे मुद्दे..."
             className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
           />
