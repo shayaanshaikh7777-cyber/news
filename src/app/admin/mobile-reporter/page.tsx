@@ -22,6 +22,8 @@ import {
   Loader2,
   X,
   Globe,
+  FileText,
+  Edit3,
 } from "lucide-react";
 
 interface ISpeechRecognitionResult {
@@ -75,13 +77,16 @@ function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null 
 export default function MobileReporterPage() {
   const router = useRouter();
 
+  // Content mode: "raw" = "कच्च्या नोंदी", "draft" = "बातमीचा मसुदा"
+  const [contentMode, setContentMode] = useState<"raw" | "draft">("raw");
+
   const [headline, setHeadline] = useState("");
   const [notes, setNotes] = useState("");
   const [location, setLocation] = useState("जामखेड शहर");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
 
-  const [isRecording, setIsRecording] = useState(false);
+  const [isMicOn, setIsMicOn] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("व्हॉइस इनपुट सुरू करा");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [aiProcessing, setAiProcessing] = useState(false);
@@ -92,26 +97,163 @@ export default function MobileReporterPage() {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showManualUrl, setShowManualUrl] = useState(false);
 
-  // Speech recognition controller refs
+  // Single recognition instance and lifecycle controller refs
   const recognitionRef = useRef<ISpeechRecognitionInstance | null>(null);
-  const shouldContinueRecognitionRef = useRef<boolean>(false);
+  const isRecognitionRunningRef = useRef<boolean>(false);
+  const shouldKeepListeningRef = useRef<boolean>(false);
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const currentInterimRef = useRef<string>("");
+
+  // Transcript state refs
+  const finalTranscriptRef = useRef<string>("");
+  const interimTranscriptRef = useRef<string>("");
+  const baseNotesRef = useRef<string>("");
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastCreatedArticleIdRef = useRef<string | null>(null);
 
-  // Check speech recognition capability on mount
+  // Helper to safely start recognition with running guard
+  const safeStartRecognition = () => {
+    if (!recognitionRef.current) return;
+    if (isRecognitionRunningRef.current) return;
+
+    try {
+      isRecognitionRunningRef.current = true;
+      recognitionRef.current.start();
+    } catch (err) {
+      isRecognitionRunningRef.current = false;
+      console.warn("SpeechRecognition start warning:", err);
+      // If error occurred while shouldKeepListening is true, schedule clean restart
+      if (shouldKeepListeningRef.current) {
+        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = setTimeout(() => {
+          if (shouldKeepListeningRef.current && !isRecognitionRunningRef.current) {
+            safeStartRecognition();
+          }
+        }, 200);
+      }
+    }
+  };
+
+  // Setup single recognition instance on mount
   useEffect(() => {
     const SR = getSpeechRecognitionConstructor();
     if (!SR) {
       setVoiceStatus("ब्राउझर व्हॉइस रेकग्निशन उपलब्ध नाही (मजकूर टाईप करा)");
+      return;
     }
 
+    const recognition = new SR();
+    recognition.lang = "mr-IN"; // Marathi recognition
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      isRecognitionRunningRef.current = true;
+      if (shouldKeepListeningRef.current) {
+        setIsMicOn(true);
+        setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला (थांबवण्यासाठी माईक बटण दाबा)");
+      }
+    };
+
+    recognition.onresult = (event: ISpeechRecognitionEvent) => {
+      if (!shouldKeepListeningRef.current) return;
+
+      let interim = "";
+
+      // Process ONLY new results beginning at event.resultIndex through event.results.length - 1
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        const text = result[0]?.transcript ?? "";
+
+        if (result.isFinal) {
+          // Commit exactly once to finalTranscriptRef
+          finalTranscriptRef.current += text + " ";
+        } else {
+          // Temporary only — replaces previous interim
+          interim += text;
+        }
+      }
+
+      interimTranscriptRef.current = interim;
+      setInterimTranscript(interim);
+
+      // Display: base text (prior to recording) + finalized transcript + current interim
+      const base = baseNotesRef.current ? baseNotesRef.current.trim() : "";
+      const finalPart = finalTranscriptRef.current.trim();
+      const interimPart = interim.trim();
+
+      let combined = base;
+      if (finalPart) {
+        combined = combined ? `${combined} ${finalPart}` : finalPart;
+      }
+      if (interimPart) {
+        combined = combined ? `${combined} ${interimPart}` : interimPart;
+      }
+
+      setNotes(combined);
+    };
+
+    recognition.onerror = (e: ISpeechRecognitionErrorEvent) => {
+      console.warn("Speech recognition error:", e.error);
+      if (!shouldKeepListeningRef.current) return;
+
+      if (e.error === "no-speech") {
+        // Natural pause/silence — keep Mic ON, do NOT stop
+        setVoiceStatus("बोलण्याची वाट पाहत आहे... (माईक सक्रिय आहे)");
+        return;
+      }
+
+      if (e.error === "aborted") {
+        // Normal during abort/stop or restart
+        return;
+      }
+
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        shouldKeepListeningRef.current = false;
+        isRecognitionRunningRef.current = false;
+        setIsMicOn(false);
+        setVoiceStatus("मायक्रोफोन परवानगी नाकारली गेली आहे. कृपया ब्राउझर सेटिंग्ज तपासा.");
+        return;
+      }
+    };
+
+    recognition.onend = () => {
+      isRecognitionRunningRef.current = false;
+
+      // Discard current interim transcript on end
+      interimTranscriptRef.current = "";
+      setInterimTranscript("");
+
+      // Preserve finalized transcript
+      const base = baseNotesRef.current ? baseNotesRef.current.trim() : "";
+      const finalPart = finalTranscriptRef.current.trim();
+      const finalizedCombined = base ? (finalPart ? `${base} ${finalPart}` : base) : finalPart;
+      setNotes(finalizedCombined);
+
+      // If user has Mic ON, safely restart recognition after pause
+      if (shouldKeepListeningRef.current) {
+        setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... (सक्रिय)");
+        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = setTimeout(() => {
+          if (shouldKeepListeningRef.current && !isRecognitionRunningRef.current) {
+            safeStartRecognition();
+          }
+        }, 150);
+      } else {
+        // User turned mic OFF: remain OFF
+        setIsMicOn(false);
+        setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
+      }
+    };
+
+    recognitionRef.current = recognition;
+
     return () => {
-      // Cleanup any active speech session on unmount
-      shouldContinueRecognitionRef.current = false;
+      shouldKeepListeningRef.current = false;
+      isRecognitionRunningRef.current = false;
       if (restartTimeoutRef.current) {
         clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = null;
       }
       if (recognitionRef.current) {
         try {
@@ -119,184 +261,116 @@ export default function MobileReporterPage() {
         } catch {
           // ignore
         }
+        recognitionRef.current = null;
       }
     };
   }, []);
 
-  const startRecognitionSession = () => {
-    const SR = getSpeechRecognitionConstructor();
-    if (!SR) return;
+  // Independent manual Mic toggle (OFF -> ON, ON -> OFF)
+  const handleMicToggle = () => {
+    if (isMicOn || shouldKeepListeningRef.current) {
+      // 1. Set shouldKeepListeningRef = false
+      shouldKeepListeningRef.current = false;
+      if (restartTimeoutRef.current) {
+        clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = null;
+      }
 
-    try {
-      if (recognitionRef.current) {
+      // 2. Stop/abort recognition
+      if (recognitionRef.current && isRecognitionRunningRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // ignore
+        }
+      }
+      isRecognitionRunningRef.current = false;
+
+      // 3. Clear interim transcript & preserve final transcript
+      interimTranscriptRef.current = "";
+      setInterimTranscript("");
+
+      const base = baseNotesRef.current ? baseNotesRef.current.trim() : "";
+      const finalPart = finalTranscriptRef.current.trim();
+      const finalizedCombined = base ? (finalPart ? `${base} ${finalPart}` : base) : finalPart;
+
+      setNotes(finalizedCombined);
+      baseNotesRef.current = finalizedCombined;
+      finalTranscriptRef.current = "";
+
+      // 4. Set UI Mic OFF
+      setIsMicOn(false);
+      setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
+    } else {
+      // Turn MIC ON
+      const SR = getSpeechRecognitionConstructor();
+      if (!SR) {
+        alert("आपला ब्राउझर थेट स्पीच-टू-टेक्स्टला सपोर्ट करत नाही. कृपया मजकूर टाईप करा.");
+        return;
+      }
+
+      // 1. Keep existing final transcript (as base for this session)
+      baseNotesRef.current = notes.trim();
+      finalTranscriptRef.current = "";
+
+      // 2. Clear stale interim transcript
+      interimTranscriptRef.current = "";
+      setInterimTranscript("");
+
+      // 3. Set shouldKeepListeningRef = true
+      shouldKeepListeningRef.current = true;
+
+      // 4. Set UI Mic ON
+      setIsMicOn(true);
+      setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला (थांबवण्यासाठी माईक बटण दाबा)");
+
+      // 5. Start recognition exactly once
+      safeStartRecognition();
+    }
+  };
+
+  // Content mode selection handler: forces Mic OFF on switch
+  const handleModeChange = (newMode: "raw" | "draft") => {
+    if (newMode === contentMode) return;
+
+    // If Mic is currently ON, safely turn it OFF and preserve finalized transcript
+    if (isMicOn || shouldKeepListeningRef.current) {
+      // 1. Stop/abort recognition safely
+      // 2. Prevent onend auto-restart
+      shouldKeepListeningRef.current = false;
+      if (restartTimeoutRef.current) {
+        clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = null;
+      }
+
+      if (recognitionRef.current && isRecognitionRunningRef.current) {
         try {
           recognitionRef.current.abort();
         } catch {
           // ignore
         }
       }
+      isRecognitionRunningRef.current = false;
 
-      const recognition = new SR();
-      recognition.lang = "mr-IN"; // Marathi recognition
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => {
-        if (shouldContinueRecognitionRef.current) {
-          setIsRecording(true);
-          setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला (थांबवण्यासाठी बटण दाबा)");
-        }
-      };
-
-      recognition.onresult = (event: ISpeechRecognitionEvent) => {
-        if (!shouldContinueRecognitionRef.current) return;
-
-        let finalChunk = "";
-        let interimChunk = "";
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const res = event.results[i];
-          const text = res[0]?.transcript || "";
-          if (res.isFinal) {
-            finalChunk += text + " ";
-          } else {
-            interimChunk += text;
-          }
-        }
-
-        // Only append finalized speech chunks once
-        if (finalChunk.trim()) {
-          const cleanFinal = finalChunk.trim();
-          setNotes((prev) => {
-            const base = prev.trim();
-            return base ? `${base} ${cleanFinal}` : cleanFinal;
-          });
-          currentInterimRef.current = "";
-          setInterimTranscript("");
-        }
-
-        if (interimChunk) {
-          currentInterimRef.current = interimChunk;
-          setInterimTranscript(interimChunk);
-        } else if (!finalChunk.trim()) {
-          currentInterimRef.current = "";
-          setInterimTranscript("");
-        }
-      };
-
-      recognition.onerror = (e: ISpeechRecognitionErrorEvent) => {
-        if (!shouldContinueRecognitionRef.current) return;
-
-        // "no-speech" triggers during speech pauses — DO NOT stop recording
-        if (e.error === "no-speech") {
-          setVoiceStatus("बोलण्याची वाट पाहत आहे... (माईक सक्रिय आहे)");
-          return;
-        }
-
-        if (e.error === "aborted") {
-          return;
-        }
-
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          shouldContinueRecognitionRef.current = false;
-          setIsRecording(false);
-          setVoiceStatus("मायक्रोफोन परवानगी नाकारली. कृपया ब्राऊझर सेटिंग्ज तपासा.");
-          return;
-        }
-
-        console.warn("Speech recognition warning:", e.error);
-      };
-
-      recognition.onend = () => {
-        // If unfinalized interim speech remains when instance ends, commit it cleanly
-        if (currentInterimRef.current.trim()) {
-          const remaining = currentInterimRef.current.trim();
-          setNotes((prev) => {
-            const base = prev.trim();
-            return base ? `${base} ${remaining}` : remaining;
-          });
-          currentInterimRef.current = "";
-          setInterimTranscript("");
-        }
-
-        // If user has not clicked stop, safely auto-restart to survive natural pauses
-        if (shouldContinueRecognitionRef.current) {
-          setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... (सक्रिय)");
-          if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
-          restartTimeoutRef.current = setTimeout(() => {
-            if (shouldContinueRecognitionRef.current) {
-              try {
-                startRecognitionSession();
-              } catch (err) {
-                console.error("Speech restart error:", err);
-              }
-            }
-          }, 150);
-        } else {
-          setIsRecording(false);
-          setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      console.error("Recognition start error:", err);
-      if (shouldContinueRecognitionRef.current) {
-        restartTimeoutRef.current = setTimeout(() => {
-          if (shouldContinueRecognitionRef.current) startRecognitionSession();
-        }, 300);
-      }
-    }
-  };
-
-  const stopVoiceRecording = () => {
-    shouldContinueRecognitionRef.current = false;
-    if (restartTimeoutRef.current) {
-      clearTimeout(restartTimeoutRef.current);
-      restartTimeoutRef.current = null;
-    }
-
-    // Commit any active interim text before stopping
-    if (currentInterimRef.current.trim()) {
-      const remaining = currentInterimRef.current.trim();
-      setNotes((prev) => {
-        const base = prev.trim();
-        return base ? `${base} ${remaining}` : remaining;
-      });
-      currentInterimRef.current = "";
-    }
-    setInterimTranscript("");
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // ignore
-      }
-    }
-
-    setIsRecording(false);
-    setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
-  };
-
-  const toggleVoiceRecording = () => {
-    const SR = getSpeechRecognitionConstructor();
-    if (!SR) {
-      alert("आपला ब्राउझर थेट स्पीच-टू-टेक्स्टला सपोर्ट करत नाही. कृपया मजकूर टाईप करा.");
-      return;
-    }
-
-    if (isRecording) {
-      stopVoiceRecording();
-    } else {
-      shouldContinueRecognitionRef.current = true;
-      setIsRecording(true);
-      setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला (थांबवण्यासाठी बटण दाबा)");
+      // 3. Preserve finalized transcript & 4. Discard only current interim transcript
+      interimTranscriptRef.current = "";
       setInterimTranscript("");
-      currentInterimRef.current = "";
-      startRecognitionSession();
+
+      const base = baseNotesRef.current ? baseNotesRef.current.trim() : "";
+      const finalPart = finalTranscriptRef.current.trim();
+      const finalizedCombined = base ? (finalPart ? `${base} ${finalPart}` : base) : finalPart;
+
+      setNotes(finalizedCombined);
+      baseNotesRef.current = finalizedCombined;
+      finalTranscriptRef.current = "";
+
+      // 5. Set Mic OFF
+      setIsMicOn(false);
+      setVoiceStatus("मोड बदलल्यामुळे माईक थांबवला आहे (पुन्हा बोलण्यासाठी माईक बटण दाबा)");
     }
+
+    // 6. Switch mode
+    setContentMode(newMode);
   };
 
   // AI cleanup and auto-drafting
@@ -326,6 +400,8 @@ export default function MobileReporterPage() {
       if (res.ok && json.data) {
         setHeadline(json.data.headline);
         setNotes(json.data.body_markdown);
+        baseNotesRef.current = json.data.body_markdown;
+        finalTranscriptRef.current = "";
         setMessage("✅ AI द्वारे बातमीचा मसुदा तयार झाला आहे!");
       } else {
         setErrorMessage(json.error || "AI मसुदा तयार करताना त्रुटी आली.");
@@ -390,8 +466,8 @@ export default function MobileReporterPage() {
     }
 
     // Stop recording if active before submitting
-    if (isRecording) {
-      stopVoiceRecording();
+    if (isMicOn || shouldKeepListeningRef.current) {
+      handleMicToggle();
     }
 
     setSubmitting(true);
@@ -484,26 +560,55 @@ export default function MobileReporterPage() {
 
       {/* Voice-to-News Card */}
       <div className="bg-gradient-to-br from-red-900 via-red-800 to-red-900 text-white p-5 rounded-2xl shadow-md text-center">
+        {/* Content Mode Selection */}
+        <div className="flex items-center justify-center gap-2 mb-3.5 bg-red-950/60 p-1 rounded-xl border border-red-700/50 max-w-xs mx-auto">
+          <button
+            type="button"
+            onClick={() => handleModeChange("raw")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+              contentMode === "raw"
+                ? "bg-white text-red-950 shadow"
+                : "text-red-200 hover:text-white"
+            }`}
+          >
+            📝 कच्च्या नोंदी
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModeChange("draft")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all ${
+              contentMode === "draft"
+                ? "bg-white text-red-950 shadow"
+                : "text-red-200 hover:text-white"
+            }`}
+          >
+            📰 बातमीचा मसुदा
+          </button>
+        </div>
+
         <p className="text-xs text-red-200 font-semibold mb-3">
-          व्हॉइस-टू-न्यूज (Voice-to-News Pipeline):
+          {contentMode === "raw"
+            ? "व्हॉइस-टू-टेक्स्ट (कच्च्या नोंदी मोड)"
+            : "व्हॉइस-टू-न्यूज (बातमीचा मसुदा मोड)"}
         </p>
 
+        {/* Independent Microphone Toggle */}
         <button
           type="button"
-          onClick={toggleVoiceRecording}
-          title={isRecording ? "रेकॉर्डिंग थांबवा" : "रेकॉर्डिंग सुरू करा"}
+          onClick={handleMicToggle}
+          title={isMicOn ? "माईक बंद करा" : "माईक सुरू करा"}
           className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center shadow-lg transition-transform active:scale-95 ${
-            isRecording
+            isMicOn
               ? "bg-red-500 ring-4 ring-red-300 animate-pulse text-white"
               : "bg-white text-red-900 hover:bg-gray-100"
           }`}
         >
-          {isRecording ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
+          {isMicOn ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
         </button>
 
         <p className="text-xs font-bold text-white mt-3">{voiceStatus}</p>
 
-        {/* Live speech preview to avoid duplicating into notes */}
+        {/* Live speech interim preview */}
         {interimTranscript && (
           <div className="mt-2.5 px-3 py-1.5 bg-red-950/70 border border-red-700/50 rounded-lg text-xs text-yellow-200 italic max-h-16 overflow-y-auto">
             🔴 ऐकत आहे: &ldquo;{interimTranscript}&rdquo;
@@ -514,6 +619,7 @@ export default function MobileReporterPage() {
           मराठी, हिंदी किंवा इंग्रजीत बोला — तुम्ही विचार करताना थांबला तरी माईक चालू राहील.
         </p>
 
+        {/* AI Cleanup button */}
         <button
           type="button"
           onClick={handleAICleanup}
@@ -584,14 +690,23 @@ export default function MobileReporterPage() {
         {/* Notes / Body */}
         <div>
           <label className="block font-bold text-gray-800 mb-1">
-            कच्च्या नोंदी किंवा बातमीचा मसुदा: <span className="text-red-600">*</span>
+            {contentMode === "raw" ? "कच्च्या नोंदी:" : "बातमीचा मसुदा:"}{" "}
+            <span className="text-red-600">*</span>
           </label>
           <textarea
             rows={6}
             required
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="घटनेचा तपशील, प्रत्यक्षदर्शींची नावे, वेळ आणि महत्त्वाचे मुद्दे..."
+            onChange={(e) => {
+              setNotes(e.target.value);
+              baseNotesRef.current = e.target.value;
+              finalTranscriptRef.current = "";
+            }}
+            placeholder={
+              contentMode === "raw"
+                ? "घटनेचा तपशील, प्रत्यक्षदर्शींची नावे, वेळ आणि महत्त्वाचे मुद्दे (कच्च्या नोंदी)..."
+                : "बातमीचा मसुदा किंवा तपशील..."
+            }
             className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
           />
         </div>
