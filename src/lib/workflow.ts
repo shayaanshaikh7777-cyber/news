@@ -1,6 +1,7 @@
 import prisma from "./prisma";
 import { SessionUser, isEditor, isSuperAdmin } from "./rbac";
 import { recordAuditLog } from "./audit";
+import { verifyDatabaseUser } from "./auth";
 
 export type ArticleStatus =
   | "DRAFT"
@@ -86,23 +87,28 @@ export async function transitionArticleStatus(params: {
     throw new Error(check.reason);
   }
 
+  const verifiedUser = await verifyDatabaseUser(user.id, user.email);
+  if (!verifiedUser) {
+    throw new Error("Authenticated user not found. Please sign in again.");
+  }
+
   const updateData: Record<string, unknown> = {
     status: targetStatus,
   };
 
   if (targetStatus === "SUBMITTED") {
-    updateData.submittedById = user.id;
+    updateData.submittedById = verifiedUser.id;
   } else if (targetStatus === "UNDER_REVIEW") {
-    updateData.reviewedById = user.id;
+    updateData.reviewedById = verifiedUser.id;
   } else if (targetStatus === "APPROVED") {
-    updateData.approvedById = user.id;
+    updateData.approvedById = verifiedUser.id;
   } else if (targetStatus === "SCHEDULED") {
-    updateData.approvedById = user.id;
+    updateData.approvedById = verifiedUser.id;
     if (scheduledAt) {
       updateData.scheduledAt = scheduledAt;
     }
   } else if (targetStatus === "PUBLISHED") {
-    updateData.publishedById = user.id;
+    updateData.publishedById = verifiedUser.id;
     updateData.publishedAt = article.publishedAt || new Date();
   }
 
@@ -115,7 +121,7 @@ export async function transitionArticleStatus(params: {
   await prisma.articleRevision.create({
     data: {
       articleId,
-      changedById: user.id,
+      changedById: verifiedUser.id,
       changeSummary: changeSummary || `स्थिती बदल: ${article.status} -> ${targetStatus}`,
       diffData: JSON.stringify({
         from: article.status,
@@ -127,7 +133,7 @@ export async function transitionArticleStatus(params: {
 
   // Record Audit Log
   await recordAuditLog({
-    userId: user.id,
+    userId: verifiedUser.id,
     action: `ARTICLE_STATUS_${targetStatus}`,
     entity: "Article",
     entityId: articleId,

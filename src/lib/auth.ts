@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import prisma from "./prisma";
 import { SessionUser, Role } from "./rbac";
 
@@ -31,6 +32,103 @@ export function verifyToken(token: string): JWTPayload | null {
 export const MASTER_ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@test.com";
 export const MASTER_ADMIN_PASS = process.env.ADMIN_PASSWORD || "Aa@12345";
 
+export type VerifiedUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  status: string;
+  avatar: string | null;
+  reporterProfileId: string | null;
+};
+
+type DbUserWithProfile = Prisma.UserGetPayload<{
+  include: { reporterProfile: true };
+}>;
+
+/**
+ * Resolves and verifies that a user identity exists and is active in PostgreSQL.
+ *
+ * Safety guarantees:
+ * 1. Checks primary key ID first (rejecting obsolete 'admin-master' tokens).
+ * 2. Falls back to verified email resolution for existing accounts with refreshed/legacy tokens.
+ * 3. Only auto-provisions if the user strictly matches configured MASTER_ADMIN_EMAIL,
+ *    using environment configuration and generating a genuine PostgreSQL CUID.
+ * 4. Never auto-provisions arbitrary users based on email.
+ * 5. Guarantees returned `id` is a real, foreign-key-valid User.id from PostgreSQL.
+ */
+export async function verifyDatabaseUser(
+  userId?: string | null,
+  email?: string | null
+): Promise<VerifiedUser | null> {
+  if (!userId && !email) return null;
+
+  try {
+    let dbUser: DbUserWithProfile | null = null;
+
+    // 1. Lookup by primary key ID if valid and not legacy fallback
+    if (userId && userId !== "admin-master") {
+      dbUser = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { reporterProfile: true },
+      });
+    }
+
+    // 2. If not resolved by ID, lookup by unique email
+    if (!dbUser && email) {
+      const cleanEmail = email.toLowerCase().trim();
+      dbUser = await prisma.user.findUnique({
+        where: { email: cleanEmail },
+        include: { reporterProfile: true },
+      });
+    }
+
+    // 3. Explicit Master Admin provisioning if database is unseeded
+    if (!dbUser && email) {
+      const cleanEmail = email.toLowerCase().trim();
+      if (cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase().trim()) {
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(MASTER_ADMIN_PASS, salt);
+        dbUser = await prisma.user.upsert({
+          where: { email: cleanEmail },
+          update: { role: "SUPER_ADMIN", status: "ACTIVE" },
+          create: {
+            name: "मुख्य संपादक (Master Admin)",
+            email: cleanEmail,
+            passwordHash: hash,
+            role: "SUPER_ADMIN",
+            status: "ACTIVE",
+          },
+          include: { reporterProfile: true },
+        });
+      }
+    }
+
+    // 4. Verify account is active
+    if (!dbUser || dbUser.status !== "ACTIVE") {
+      return null;
+    }
+
+    return {
+      id: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email,
+      role: dbUser.role as Role,
+      status: dbUser.status,
+      avatar: dbUser.avatar,
+      reporterProfileId: dbUser.reporterProfile?.id || null,
+    };
+  } catch (err: unknown) {
+    console.error("[verifyDatabaseUser error]:", err);
+    return null;
+  }
+}
+
+/**
+ * Retrieves the current authenticated user by validating the session cookie
+ * against the PostgreSQL database. Guarantees session.id corresponds to a
+ * verified User row in PostgreSQL.
+ */
 export async function getCurrentUser(): Promise<SessionUser | null> {
   try {
     const cookieStore = await cookies();
@@ -38,92 +136,81 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     if (!token) return null;
 
     const decoded = verifyToken(token);
-    if (!decoded) return null;
+    if (!decoded || !decoded.email) return null;
 
-    // Master Admin fallback if DB is unseeded or offline
-    if (decoded.email === MASTER_ADMIN_EMAIL) {
-      return {
-        id: decoded.id,
-        name: decoded.name || "मुख्य संपादक (Master Admin)",
-        email: MASTER_ADMIN_EMAIL,
-        role: "SUPER_ADMIN",
-        avatar: decoded.avatar,
-        reporterProfileId: null,
-      };
+    const verified = await verifyDatabaseUser(decoded.id, decoded.email);
+    if (!verified) {
+      return null;
     }
 
-    // Verify user in DB if DB is accessible
-    try {
-      if (process.env.DATABASE_URL) {
-        const user = await prisma.user.findUnique({
-          where: { id: decoded.id },
-          include: { reporterProfile: true },
-        });
-
-        if (!user || user.status !== "ACTIVE") return null;
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role as Role,
-          avatar: user.avatar,
-          reporterProfileId: user.reporterProfile?.id || null,
-        };
-      }
-    } catch {
-      // If DB error, trust verified JWT token
-      return {
-        id: decoded.id,
-        name: decoded.name,
-        email: decoded.email,
-        role: decoded.role,
-        avatar: decoded.avatar,
-        reporterProfileId: decoded.reporterProfileId || null,
-      };
+    return {
+      id: verified.id,
+      name: verified.name,
+      email: verified.email,
+      role: verified.role,
+      avatar: verified.avatar,
+      reporterProfileId: verified.reporterProfileId,
+    };
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "digest" in err && (err as { digest?: string }).digest === "DYNAMIC_SERVER_USAGE") {
+      throw err;
     }
-
-    return null;
-  } catch {
+    console.error("[getCurrentUser error]:", err);
     return null;
   }
 }
 
-export async function loginUser(email: string, passwordPlain: string): Promise<{ success: boolean; user?: SessionUser; error?: string }> {
+/**
+ * Authenticates user credentials and sets an HTTP-only session cookie.
+ * Always resolves and stores genuine PostgreSQL User.id in the JWT payload.
+ */
+export async function loginUser(
+  email: string,
+  passwordPlain: string
+): Promise<{ success: boolean; user?: SessionUser; error?: string }> {
   try {
     const cleanEmail = email.toLowerCase().trim();
+    if (!cleanEmail || !passwordPlain) {
+      return { success: false, error: "ईमेल आणि पासवर्ड आवश्यक आहेत." };
+    }
 
-    // 1. Instant Master Admin login requested by user (admin@test.com / Aa@12345)
-    if (cleanEmail === MASTER_ADMIN_EMAIL && passwordPlain === MASTER_ADMIN_PASS) {
-      let masterId = "admin-master";
-      try {
-        if (process.env.DATABASE_URL) {
-          const salt = await bcrypt.genSalt(10);
-          const hash = await bcrypt.hash(MASTER_ADMIN_PASS, salt);
-          const upserted = await prisma.user.upsert({
-            where: { email: MASTER_ADMIN_EMAIL },
-            update: { passwordHash: hash, role: "SUPER_ADMIN", status: "ACTIVE" },
-            create: {
-              name: "मुख्य संपादक (Master Admin)",
-              email: MASTER_ADMIN_EMAIL,
-              passwordHash: hash,
-              role: "SUPER_ADMIN",
-              status: "ACTIVE",
-            },
+    // 1. Master Admin login with configured credentials
+    if (cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase().trim() && passwordPlain === MASTER_ADMIN_PASS) {
+      let masterUser = await prisma.user.findUnique({
+        where: { email: cleanEmail },
+        include: { reporterProfile: true },
+      });
+
+      if (!masterUser) {
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(MASTER_ADMIN_PASS, salt);
+        masterUser = await prisma.user.create({
+          data: {
+            name: "मुख्य संपादक (Master Admin)",
+            email: cleanEmail,
+            passwordHash: hash,
+            role: "SUPER_ADMIN",
+            status: "ACTIVE",
+          },
+          include: { reporterProfile: true },
+        });
+      } else {
+        if (masterUser.status !== "ACTIVE" || masterUser.role !== "SUPER_ADMIN") {
+          masterUser = await prisma.user.update({
+            where: { id: masterUser.id },
+            data: { status: "ACTIVE", role: "SUPER_ADMIN" },
+            include: { reporterProfile: true },
           });
-          masterId = upserted.id;
         }
-      } catch (err) {
-        console.warn("DB master admin auto-provision skipped:", err);
       }
 
       const sessionUser: SessionUser = {
-        id: masterId,
-        name: "मुख्य संपादक (Master Admin)",
-        email: MASTER_ADMIN_EMAIL,
+        id: masterUser.id,
+        name: masterUser.name,
+        email: masterUser.email,
         role: "SUPER_ADMIN",
-        avatar: null,
-        reporterProfileId: null,
+        avatar: masterUser.avatar,
+        reporterProfileId: masterUser.reporterProfile?.id || null,
       };
 
       const token = createToken({
@@ -131,6 +218,8 @@ export async function loginUser(email: string, passwordPlain: string): Promise<{
         email: sessionUser.email,
         name: sessionUser.name,
         role: sessionUser.role,
+        avatar: sessionUser.avatar,
+        reporterProfileId: sessionUser.reporterProfileId,
       });
 
       const cookieStore = await cookies();
@@ -145,17 +234,11 @@ export async function loginUser(email: string, passwordPlain: string): Promise<{
       return { success: true, user: sessionUser };
     }
 
-    let user: any = null;
-    try {
-      if (process.env.DATABASE_URL) {
-        user = await prisma.user.findUnique({
-          where: { email: cleanEmail },
-          include: { reporterProfile: true },
-        });
-      }
-    } catch {
-      // ignore
-    }
+    // 2. Standard user authentication via PostgreSQL
+    const user = await prisma.user.findUnique({
+      where: { email: cleanEmail },
+      include: { reporterProfile: true },
+    });
 
     if (!user) {
       return { success: false, error: "ईमेल किंवा पासवर्ड चुकीचा आहे." };
@@ -199,13 +282,13 @@ export async function loginUser(email: string, passwordPlain: string): Promise<{
 
     return { success: true, user: sessionUser };
   } catch (err: unknown) {
+    console.error("[loginUser error]:", err);
     const msg = err instanceof Error ? err.message : "लॉगिन करताना त्रुटी आली.";
     return { success: false, error: msg };
   }
 }
 
-export async function logoutUser() {
+export async function logoutUser(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(COOKIE_NAME);
 }
-

@@ -1,7 +1,7 @@
 "use server";
 
 import prisma, { isDatabaseAvailable } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, verifyDatabaseUser } from "@/lib/auth";
 import { isReporter, isEditor } from "@/lib/rbac";
 import { recordAuditLog } from "@/lib/audit";
 import { optimizeImageBuffer, ImageOptimizationOptions } from "@/lib/media/optimizer";
@@ -45,6 +45,14 @@ export async function uploadAndOptimizeMediaAction(
     return {
       success: false,
       message: "अनधिकृत वापर. मीडिया अपलोड करण्यासाठी लॉगिन आवश्यक आहे.",
+    };
+  }
+
+  const verifiedUser = await verifyDatabaseUser(user.id, user.email);
+  if (!verifiedUser) {
+    return {
+      success: false,
+      message: "Authenticated user not found. Please sign in again.",
     };
   }
 
@@ -109,12 +117,13 @@ export async function uploadAndOptimizeMediaAction(
               savedBytes: optimized.savedBytes,
               savedPercent: optimized.savedPercent,
               altText: customAlt || originalName.replace(/\.[^/.]+$/, ""),
-              uploadedById: user.id,
+              uploadedById: verifiedUser.id,
             },
           });
           assetId = record.id;
-        } catch (dbErr: any) {
-          console.warn("[Media Asset DB save notice]:", dbErr?.message);
+        } catch (dbErr: unknown) {
+          const dbErrMsg = dbErr instanceof Error ? dbErr.message : "Unknown DB error";
+          console.warn("[Media Asset DB save notice]:", dbErrMsg);
         }
       }
 
@@ -134,26 +143,27 @@ export async function uploadAndOptimizeMediaAction(
         savedPercent: optimized.savedPercent,
         altText: customAlt || originalName,
         createdAt: new Date().toISOString(),
-        uploaderName: user.name,
+        uploaderName: verifiedUser.name,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errObj = err as { name?: string; message?: string; stage?: string };
       // Diagnostic server log for production debugging (Sanitized: NO keys, secrets or credentials)
       console.error("[IMAGE_OPTIMIZATION_ERROR]", {
-        errorType: err?.name || "ImageOptimizationError",
+        errorType: errObj?.name || "ImageOptimizationError",
         fileName: file.name,
         mimeType: file.type,
         inputSize: file.size,
-        message: err?.message || "Unknown error",
-        stage: err?.stage || "OPTIMIZATION_OR_STORAGE",
+        message: errObj?.message || "Unknown error",
+        stage: errObj?.stage || "OPTIMIZATION_OR_STORAGE",
       });
-      errors.push(`${file.name}: ${err?.message || "प्रक्रिया अयशस्वी"}`);
+      errors.push(`${file.name}: ${errObj?.message || "प्रक्रिया अयशस्वी"}`);
     }
   }
 
   if (savedAssets.length > 0) {
     try {
       await recordAuditLog({
-        userId: user.id,
+        userId: verifiedUser.id,
         action: "MEDIA_UPLOAD",
         entity: "MediaAsset",
         details: {

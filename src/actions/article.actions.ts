@@ -1,7 +1,8 @@
 "use server";
 
 import prisma, { isDatabaseAvailable } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, verifyDatabaseUser } from "@/lib/auth";
+import { Article } from "@prisma/client";
 import { isReporter, isEditor, isSuperAdmin, canEditArticle } from "@/lib/rbac";
 import { transitionArticleStatus, ArticleStatus } from "@/lib/workflow";
 import { ArticleFormSchema, LiveUpdateFormSchema } from "@/schemas/article.schema";
@@ -33,6 +34,13 @@ export async function createAIDraftArticleAction(data: {
       return { success: false, error: "डेटाबेस सध्या उपलब्ध नाही (Database Offline)." };
     }
 
+    // Pre-flight database user verification to prevent Article_createdById_fkey violation
+    const verifiedUser = await verifyDatabaseUser(user.id, user.email);
+    if (!verifiedUser) {
+      console.error(`[createAIDraftArticleAction] User not found in DB: id=${user.id}, email=${user.email}`);
+      return { success: false, error: "Authenticated user not found. Please sign in again." };
+    }
+
     // Verify category exists in production Category table to prevent Article_categoryId_fkey violation
     const catResolution = await resolveExistingCategoryId(data.categoryId);
     if (!catResolution.success) {
@@ -58,7 +66,7 @@ export async function createAIDraftArticleAction(data: {
         seoTitle: data.seoTitle?.trim() || null,
         seoDescription: data.seoDescription?.trim() || null,
         seoKeywords: data.seoKeywords?.trim() || null,
-        createdById: user.id,
+        createdById: verifiedUser.id,
         status: "DRAFT",
         slug: cleanSlug,
         readingTimeMinutes: readingTime,
@@ -68,7 +76,7 @@ export async function createAIDraftArticleAction(data: {
     });
 
     await recordAuditLog({
-      userId: user.id,
+      userId: verifiedUser.id,
       action: "ARTICLE_CREATED",
       entity: "Article",
       entityId: draft.id,
@@ -77,9 +85,10 @@ export async function createAIDraftArticleAction(data: {
 
     revalidatePath("/admin/articles");
     return { success: true, draftId: draft.id };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[createAIDraftArticleAction error]", err);
-    return { success: false, error: err?.message || "मसुदा सेव्ह करताना त्रुटी आली." };
+    const msg = err instanceof Error ? err.message : "मसुदा सेव्ह करताना त्रुटी आली.";
+    return { success: false, error: msg };
   }
 }
 
@@ -111,6 +120,12 @@ export async function createMobileReportAction(data: MobileReportInput): Promise
   }
 
   try {
+    const verifiedUser = await verifyDatabaseUser(user.id, user.email);
+    if (!verifiedUser) {
+      console.error(`[createMobileReportAction] User not found in DB: id=${user.id}, email=${user.email}`);
+      return { success: false, error: "Authenticated user not found. Please sign in again." };
+    }
+
     let catId = data.categoryId;
     if (catId) {
       const exists = await prisma.category.findUnique({ where: { id: catId } });
@@ -143,9 +158,9 @@ export async function createMobileReportAction(data: MobileReportInput): Promise
         youtubeUrl: data.youtubeUrl?.trim() || null,
         categoryId: catId,
         locationId: data.locationId || null,
-        createdById: user.id,
-        submittedById: user.id,
-        reporterId: user.reporterProfileId || null,
+        createdById: verifiedUser.id,
+        submittedById: verifiedUser.id,
+        reporterId: verifiedUser.reporterProfileId || null,
         status: "SUBMITTED",
         slug: cleanSlug,
         readingTimeMinutes: readingTime,
@@ -155,7 +170,7 @@ export async function createMobileReportAction(data: MobileReportInput): Promise
     });
 
     await recordAuditLog({
-      userId: user.id,
+      userId: verifiedUser.id,
       action: "ARTICLE_CREATED",
       entity: "Article",
       entityId: article.id,
@@ -165,9 +180,10 @@ export async function createMobileReportAction(data: MobileReportInput): Promise
     revalidatePath("/admin/articles");
     revalidatePath("/admin");
     return { success: true, articleId: article.id };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[createMobileReportAction error]", err);
-    return { success: false, error: err?.message || "बातमी सबमिट करताना त्रुटी आली." };
+    const msg = err instanceof Error ? err.message : "बातमी सबमिट करताना त्रुटी आली.";
+    return { success: false, error: msg };
   }
 }
 
@@ -181,6 +197,12 @@ export async function createArticleAction(formData: FormData): Promise<void> {
     throw new Error("डेटाबेस उपलब्ध नाही.");
   }
 
+  const verifiedUser = await verifyDatabaseUser(user.id, user.email);
+  if (!verifiedUser) {
+    console.error(`[createArticleAction] User not found in DB: id=${user.id}, email=${user.email}`);
+    throw new Error("Authenticated user not found. Please sign in again.");
+  }
+
   const raw = {
     headline: formData.get("headline") as string,
     subheadline: (formData.get("subheadline") as string) || null,
@@ -190,7 +212,7 @@ export async function createArticleAction(formData: FormData): Promise<void> {
     youtubeUrl: (formData.get("youtubeUrl") as string) || null,
     categoryId: formData.get("categoryId") as string,
     locationId: (formData.get("locationId") as string) || null,
-    reporterId: (formData.get("reporterId") as string) || user.reporterProfileId || null,
+    reporterId: (formData.get("reporterId") as string) || verifiedUser.reporterProfileId || null,
     source: (formData.get("source") as string) || null,
     priority: Number(formData.get("priority") || 0),
     isBreaking: formData.get("isBreaking") === "true" || formData.get("isBreaking") === "on",
@@ -224,7 +246,7 @@ export async function createArticleAction(formData: FormData): Promise<void> {
 
   const draftId = formData.get("draftId") as string;
   const requestedStatus = (formData.get("status") as string) || "DRAFT";
-  const userIsEditor = isEditor(user.role);
+  const userIsEditor = isEditor(verifiedUser.role);
 
   let finalStatus = "DRAFT";
   let publishedAt: Date | null = null;
@@ -234,17 +256,17 @@ export async function createArticleAction(formData: FormData): Promise<void> {
   if (requestedStatus === "PUBLISHED" && userIsEditor) {
     finalStatus = "PUBLISHED";
     publishedAt = new Date();
-    publishedById = user.id;
+    publishedById = verifiedUser.id;
   } else if (requestedStatus === "SUBMITTED" || (requestedStatus === "PUBLISHED" && !userIsEditor)) {
     finalStatus = "SUBMITTED";
-    submittedById = user.id;
+    submittedById = verifiedUser.id;
   }
 
-  let article: any = null;
+  let article: Article | null = null;
 
   if (draftId) {
     const existing = await prisma.article.findUnique({ where: { id: draftId } });
-    if (existing && canEditArticle(user, existing)) {
+    if (existing && canEditArticle(verifiedUser, existing)) {
       article = await prisma.article.update({
         where: { id: draftId },
         data: {
@@ -269,7 +291,7 @@ export async function createArticleAction(formData: FormData): Promise<void> {
         status: finalStatus,
         slug: cleanSlug,
         readingTimeMinutes: readingTime,
-        createdById: user.id,
+        createdById: verifiedUser.id,
         publishedAt,
         publishedById,
         submittedById,
@@ -280,14 +302,14 @@ export async function createArticleAction(formData: FormData): Promise<void> {
   await prisma.articleRevision.create({
     data: {
       articleId: article.id,
-      changedById: user.id,
+      changedById: verifiedUser.id,
       changeSummary: draftId ? "AI मसुदा अद्ययावत केला." : "नवीन बातमी ड्राफ्ट तयार केली.",
       diffData: JSON.stringify(article),
     },
   });
 
   await recordAuditLog({
-    userId: user.id,
+    userId: verifiedUser.id,
     action: "ARTICLE_CREATED",
     entity: "Article",
     entityId: article.id,
@@ -306,6 +328,12 @@ export async function updateArticleAction(articleId: string, formData: FormData)
     return;
   }
 
+  const verifiedUser = await verifyDatabaseUser(user.id, user.email);
+  if (!verifiedUser) {
+    console.error(`[updateArticleAction] User not found in DB: id=${user.id}, email=${user.email}`);
+    throw new Error("Authenticated user not found. Please sign in again.");
+  }
+
   const existing = await prisma.article.findUnique({
     where: { id: articleId },
   });
@@ -314,12 +342,12 @@ export async function updateArticleAction(articleId: string, formData: FormData)
     return;
   }
 
-  if (!canEditArticle(user, existing)) {
+  if (!canEditArticle(verifiedUser, existing)) {
     return;
   }
 
   const requestedStatus = (formData.get("status") as string) || existing.status;
-  const userIsEditor = isEditor(user.role);
+  const userIsEditor = isEditor(verifiedUser.role);
 
   let finalStatus = existing.status;
   let publishedAt = existing.publishedAt;
@@ -329,10 +357,10 @@ export async function updateArticleAction(articleId: string, formData: FormData)
   if (requestedStatus === "PUBLISHED" && userIsEditor) {
     finalStatus = "PUBLISHED";
     publishedAt = existing.publishedAt || new Date();
-    publishedById = user.id;
+    publishedById = verifiedUser.id;
   } else if (requestedStatus === "SUBMITTED") {
     finalStatus = "SUBMITTED";
-    submittedById = user.id;
+    submittedById = verifiedUser.id;
   } else if (requestedStatus === "DRAFT") {
     finalStatus = "DRAFT";
   }
@@ -393,14 +421,14 @@ export async function updateArticleAction(articleId: string, formData: FormData)
   await prisma.articleRevision.create({
     data: {
       articleId,
-      changedById: user.id,
+      changedById: verifiedUser.id,
       changeSummary: "बातमीचा मजकूर अद्ययावत केला.",
       diffData: JSON.stringify({ old: existing, updated }),
     },
   });
 
   await recordAuditLog({
-    userId: user.id,
+    userId: verifiedUser.id,
     action: "ARTICLE_UPDATED",
     entity: "Article",
     entityId: articleId,
@@ -449,9 +477,14 @@ export async function addLiveUpdateAction(formData: FormData): Promise<void> {
     return;
   }
 
+  const verifiedUser = await verifyDatabaseUser(user.id, user.email);
+  if (!verifiedUser) {
+    return;
+  }
+
   const articleId = formData.get("articleId") as string;
   const content = formData.get("content") as string;
-  const authorName = (formData.get("authorName") as string) || user.name;
+  const authorName = (formData.get("authorName") as string) || verifiedUser.name;
 
   const parsed = LiveUpdateFormSchema.safeParse({ articleId, content, authorName });
   if (!parsed.success) {
@@ -467,7 +500,7 @@ export async function addLiveUpdateAction(formData: FormData): Promise<void> {
   });
 
   await recordAuditLog({
-    userId: user.id,
+    userId: verifiedUser.id,
     action: "LIVE_UPDATE_ADDED",
     entity: "LiveUpdate",
     entityId: liveUpdate.id,

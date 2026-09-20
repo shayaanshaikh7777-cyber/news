@@ -52,16 +52,16 @@ describe("Category Foreign Key Protection & Resolution", () => {
   it("resolves AI-generated Marathi name to existing Category.id", async () => {
     vi.mocked(prisma.category.count).mockResolvedValue(7 as any);
     vi.mocked(prisma.category.findUnique).mockResolvedValue(null as any);
-    vi.mocked(prisma.category.findFirst).mockImplementation(async (args: any) => {
+    (prisma.category.findFirst as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (args: any) => {
       if (args?.where?.OR) {
         return {
           id: "cm_politics_uuid",
           name: "Politics",
           nameMarathi: "राजकारण",
           isActive: true,
-        } as any;
+        };
       }
-      return null as any;
+      return null;
     });
 
     const result = await resolveExistingCategoryId("राजकारण");
