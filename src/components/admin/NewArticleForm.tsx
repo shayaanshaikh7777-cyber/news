@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { createArticleAction } from "@/actions/article.actions";
 import FeaturedImageUploader from "@/components/admin/FeaturedImageUploader";
 import {
@@ -97,6 +97,14 @@ export default function NewArticleForm({
   const [aiError, setAiError] = useState("");
   const [aiSuccessMessage, setAiSuccessMessage] = useState("");
   const [copiedField, setCopiedField] = useState("");
+
+  // IME Composition state refs for Marathi / Gboard input safety
+  const isHeadlineComposingRef = useRef(false);
+  const isSubheadlineComposingRef = useRef(false);
+  const isSummaryComposingRef = useRef(false);
+  const isBodyComposingRef = useRef(false);
+  const isAiNotesComposingRef = useRef(false);
+  const isAiLocationComposingRef = useRef(false);
 
   // Social Captions from AI
   const [socialCaptions, setSocialCaptions] = useState<{
@@ -226,9 +234,16 @@ export default function NewArticleForm({
             <textarea
               rows={4}
               value={aiNotes}
+              onCompositionStart={() => {
+                isAiNotesComposingRef.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                isAiNotesComposingRef.current = false;
+                setAiNotes(e.currentTarget.value);
+              }}
               onChange={(e) => setAiNotes(e.target.value)}
               placeholder="उदा. जामखेड कृषी उत्पन्न बाजार समितीमध्ये कांद्याची मोठी आवक. आज सुमारे २५००० गोण्यांची आवक झाली. उच्च प्रतीच्या कांद्याला २८०० रुपये प्रतिक्विंटल भाव मिळाला. सोलापूर, बीड भागातील शेतकरी उपस्थित..."
-              className="w-full bg-purple-950/60 border border-purple-700/70 rounded-xl p-3 text-xs sm:text-sm text-white placeholder-purple-300/50 focus:ring-2 focus:ring-yellow-400 focus:outline-none leading-relaxed font-sans"
+              className="w-full bg-purple-950/60 border border-purple-700/70 rounded-xl p-3 text-xs sm:text-sm text-white placeholder-purple-300/50 focus:ring-2 focus:ring-yellow-400 focus:outline-none leading-relaxed font-marathi"
             />
           </div>
 
@@ -241,9 +256,16 @@ export default function NewArticleForm({
               <input
                 type="text"
                 value={aiLocation}
+                onCompositionStart={() => {
+                  isAiLocationComposingRef.current = true;
+                }}
+                onCompositionEnd={(e) => {
+                  isAiLocationComposingRef.current = false;
+                  setAiLocation(e.currentTarget.value);
+                }}
                 onChange={(e) => setAiLocation(e.target.value)}
                 placeholder="उदा. जामखेड / खर्डा / नानज"
-                className="w-full bg-purple-950/60 border border-purple-700/70 rounded-lg p-2.5 text-xs text-white placeholder-purple-300/50 focus:ring-2 focus:ring-yellow-400 focus:outline-none"
+                className="w-full bg-purple-950/60 border border-purple-700/70 rounded-lg p-2.5 text-xs text-white placeholder-purple-300/50 focus:ring-2 focus:ring-yellow-400 focus:outline-none font-marathi"
               />
             </div>
 
@@ -370,9 +392,16 @@ export default function NewArticleForm({
             name="headline"
             required
             value={headline}
+            onCompositionStart={() => {
+              isHeadlineComposingRef.current = true;
+            }}
+            onCompositionEnd={(e) => {
+              isHeadlineComposingRef.current = false;
+              setHeadline(e.currentTarget.value);
+            }}
             onChange={(e) => setHeadline(e.target.value)}
             placeholder="उदा. जामखेड शहराच्या पाणीपुरवठ्यासाठी नवीन जलवाहिनीचे काम सुरू"
-            className="w-full text-base font-bold border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none"
+            className="w-full text-base font-bold font-marathi border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none"
           />
         </div>
 
@@ -438,9 +467,16 @@ export default function NewArticleForm({
               type="text"
               name="subheadline"
               value={subheadline}
+              onCompositionStart={() => {
+                isSubheadlineComposingRef.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                isSubheadlineComposingRef.current = false;
+                setSubheadline(e.currentTarget.value);
+              }}
               onChange={(e) => setSubheadline(e.target.value)}
               placeholder="उदा. खर्डा चौक ते बीड नाका दरम्यान पाईपलाईन; पुढील १५ दिवसांत काम पूर्ण"
-              className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
+              className="w-full border border-gray-300 rounded-lg p-2.5 font-marathi text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
             />
           </div>
 
@@ -452,9 +488,16 @@ export default function NewArticleForm({
               name="summary"
               rows={2}
               value={summary}
+              onCompositionStart={() => {
+                isSummaryComposingRef.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                isSummaryComposingRef.current = false;
+                setSummary(e.currentTarget.value);
+              }}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="२ ते ३ वाक्यांत महत्त्वाचा निष्कर्ष किंवा बातमीचा गाभा..."
-              className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
+              className="w-full border border-gray-300 rounded-lg p-2.5 font-marathi text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
             />
           </div>
 
@@ -472,9 +515,16 @@ export default function NewArticleForm({
               required
               rows={12}
               value={bodyMarkdown}
+              onCompositionStart={() => {
+                isBodyComposingRef.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                isBodyComposingRef.current = false;
+                setBodyMarkdown(e.currentTarget.value);
+              }}
               onChange={(e) => setBodyMarkdown(e.target.value)}
               placeholder={`### मुख्य बातमी\n\nजामखेड (विशेष प्रतिनिधी): ...\n\n#### महत्त्वाचे मुद्दे:\n- पहिला मुद्दा\n- दुसरा मुद्दा\n\n> "प्रशासनाकडून आवश्यक सर्व मदत दिली जाईल." - तहसीलदार`}
-              className="w-full font-mono text-xs sm:text-sm border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
+              className="w-full font-marathi text-xs sm:text-sm border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
             />
           </div>
         </div>

@@ -216,7 +216,7 @@ export default async function EditArticlePage({ params }: Props) {
                 name="headline"
                 required
                 defaultValue={article.headline}
-                className="w-full text-base font-bold border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none"
+                className="w-full text-base font-bold font-marathi border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none"
               />
             </div>
 
@@ -277,7 +277,7 @@ export default async function EditArticlePage({ params }: Props) {
                   type="text"
                   name="subheadline"
                   defaultValue={article.subheadline || ""}
-                  className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
+                  className="w-full font-marathi border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
                 />
               </div>
 
@@ -289,7 +289,7 @@ export default async function EditArticlePage({ params }: Props) {
                   name="summary"
                   rows={2}
                   defaultValue={article.summary || ""}
-                  className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
+                  className="w-full font-marathi border border-gray-300 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-red-700 focus:outline-none"
                 />
               </div>
 
@@ -302,7 +302,7 @@ export default async function EditArticlePage({ params }: Props) {
                   required
                   rows={12}
                   defaultValue={article.bodyMarkdown}
-                  className="w-full font-mono text-xs sm:text-sm border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
+                  className="w-full font-marathi text-xs sm:text-sm border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
                 />
               </div>
             </div>
@@ -478,7 +478,7 @@ export default async function EditArticlePage({ params }: Props) {
                   required
                   rows={3}
                   placeholder="उदा. ७:४२ PM — पोलिसांनी घटनास्थळी पंचनामा पूर्ण केला..."
-                  className="w-full border border-gray-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-red-700 focus:outline-none"
+                  className="w-full font-marathi border border-gray-300 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-red-700 focus:outline-none"
                 />
               </div>
 

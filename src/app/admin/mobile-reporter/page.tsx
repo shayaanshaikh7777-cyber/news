@@ -97,6 +97,9 @@ export default function MobileReporterPage() {
   const recoveryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const consecutiveRecoveriesRef = useRef<number>(0);
   const lastRecoveryTimeRef = useRef<number>(0);
+  const isHeadlineComposingRef = useRef<boolean>(false);
+  const isNotesComposingRef = useRef<boolean>(false);
+  const pendingVoiceTranscriptRef = useRef<string>("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastCreatedArticleIdRef = useRef<string | null>(null);
@@ -210,11 +213,18 @@ export default function MobileReporterPage() {
           // Guard against processing the same index twice in this session
           processedIndicesRef.current.add(i);
 
-          // Authoritative single commit path directly into textarea state
-          setNotes((prev) => {
-            const base = prev.trim();
-            return base ? `${base} ${transcript}` : transcript;
-          });
+          // Respect active Gboard IME composition: do not overwrite active manual typing
+          if (isNotesComposingRef.current) {
+            pendingVoiceTranscriptRef.current = pendingVoiceTranscriptRef.current
+              ? `${pendingVoiceTranscriptRef.current} ${transcript}`
+              : transcript;
+          } else {
+            // Authoritative single commit path directly into textarea state
+            setNotes((prev) => {
+              const base = prev.trim();
+              return base ? `${base} ${transcript}` : transcript;
+            });
+          }
         }
       };
 
@@ -573,9 +583,16 @@ export default function MobileReporterPage() {
             type="text"
             required
             value={headline}
+            onCompositionStart={() => {
+              isHeadlineComposingRef.current = true;
+            }}
+            onCompositionEnd={(e) => {
+              isHeadlineComposingRef.current = false;
+              setHeadline(e.currentTarget.value);
+            }}
             onChange={(e) => setHeadline(e.target.value)}
             placeholder="उदा. खर्डा येथे अचानक वीज पुरवठा खंडित, व्यापारी आक्रमक"
-            className="w-full border border-gray-300 rounded-lg p-2.5 font-bold text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none"
+            className="w-full border border-gray-300 rounded-lg p-2.5 font-bold font-marathi text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none"
           />
         </div>
 
@@ -588,7 +605,7 @@ export default function MobileReporterPage() {
           <select
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg p-2.5 font-semibold text-gray-800 bg-gray-50 focus:ring-2 focus:ring-red-700 focus:outline-none"
+            className="w-full border border-gray-300 rounded-lg p-2.5 font-semibold font-marathi text-gray-800 bg-gray-50 focus:ring-2 focus:ring-red-700 focus:outline-none"
           >
             <option value="जामखेड शहर">जामखेड शहर</option>
             <option value="खर्डा">खर्डा</option>
@@ -615,9 +632,23 @@ export default function MobileReporterPage() {
             rows={6}
             required
             value={notes}
+            onCompositionStart={() => {
+              isNotesComposingRef.current = true;
+            }}
+            onCompositionEnd={(e) => {
+              isNotesComposingRef.current = false;
+              const committedText = e.currentTarget.value;
+              if (pendingVoiceTranscriptRef.current) {
+                const voice = pendingVoiceTranscriptRef.current.trim();
+                pendingVoiceTranscriptRef.current = "";
+                setNotes(committedText ? `${committedText} ${voice}` : voice);
+              } else {
+                setNotes(committedText);
+              }
+            }}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="घटनेचा तपशील, प्रत्यक्षदर्शींची नावे, वेळ आणि महत्त्वाचे मुद्दे..."
-            className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
+            className="w-full border border-gray-300 rounded-lg p-2.5 text-xs font-marathi text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
           />
         </div>
 

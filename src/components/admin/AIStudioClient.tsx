@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -48,6 +48,14 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
   const [activeAction, setActiveAction] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [copiedField, setCopiedField] = useState<string>("");
+
+  // IME Composition state refs for Marathi / Gboard input safety
+  const isNotesComposingRef = useRef(false);
+  const isLocationComposingRef = useRef(false);
+  const isResultHeadlineComposingRef = useRef(false);
+  const isResultSubheadlineComposingRef = useRef(false);
+  const isResultSummaryComposingRef = useRef(false);
+  const isResultBodyComposingRef = useRef(false);
 
   // Result state
   const [result, setResult] = useState<{
@@ -250,8 +258,15 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
               rows={6}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              onCompositionStart={() => {
+                isNotesComposingRef.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                isNotesComposingRef.current = false;
+                setNotes(e.currentTarget.value);
+              }}
               placeholder="पत्रकाराने घेतलेल्या कच्च्या नोंदी, व्हॉइस नोट्स किंवा माहिती येथे टाईप करा..."
-              className="w-full border border-gray-300 rounded-lg p-3 text-xs sm:text-sm font-medium text-gray-900 focus:ring-2 focus:ring-purple-700 focus:outline-none leading-relaxed"
+              className="w-full border border-gray-300 rounded-lg p-3 text-xs sm:text-sm font-medium font-marathi text-gray-900 focus:ring-2 focus:ring-purple-700 focus:outline-none leading-relaxed"
             />
 
             <div className="grid grid-cols-2 gap-3 text-xs font-bold">
@@ -264,8 +279,15 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
+                  onCompositionStart={() => {
+                    isLocationComposingRef.current = true;
+                  }}
+                  onCompositionEnd={(e) => {
+                    isLocationComposingRef.current = false;
+                    setLocation(e.currentTarget.value);
+                  }}
                   placeholder="उदा. जामखेड / खर्डा"
-                  className="w-full border border-gray-300 rounded p-2 text-xs"
+                  className="w-full border border-gray-300 rounded p-2 text-xs font-marathi"
                 />
               </div>
 
@@ -432,7 +454,14 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
                   type="text"
                   value={result.headline}
                   onChange={(e) => setResult({ ...result, headline: e.target.value })}
-                  className="w-full text-base font-black text-gray-900 border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-purple-700"
+                  onCompositionStart={() => {
+                    isResultHeadlineComposingRef.current = true;
+                  }}
+                  onCompositionEnd={(e) => {
+                    isResultHeadlineComposingRef.current = false;
+                    setResult((prev) => (prev ? { ...prev, headline: e.currentTarget.value } : prev));
+                  }}
+                  className="w-full text-base font-black font-marathi text-gray-900 border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-purple-700"
                 />
               </div>
 
@@ -446,7 +475,14 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
                     type="text"
                     value={result.subheadline}
                     onChange={(e) => setResult({ ...result, subheadline: e.target.value })}
-                    className="w-full text-xs font-semibold text-gray-800 border border-gray-300 rounded-lg p-2"
+                    onCompositionStart={() => {
+                      isResultSubheadlineComposingRef.current = true;
+                    }}
+                    onCompositionEnd={(e) => {
+                      isResultSubheadlineComposingRef.current = false;
+                      setResult((prev) => (prev ? { ...prev, subheadline: e.currentTarget.value } : prev));
+                    }}
+                    className="w-full text-xs font-semibold font-marathi text-gray-800 border border-gray-300 rounded-lg p-2"
                   />
                 </div>
 
@@ -458,7 +494,14 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
                     rows={2}
                     value={result.summary}
                     onChange={(e) => setResult({ ...result, summary: e.target.value })}
-                    className="w-full text-xs text-gray-800 border border-gray-300 rounded-lg p-2"
+                    onCompositionStart={() => {
+                      isResultSummaryComposingRef.current = true;
+                    }}
+                    onCompositionEnd={(e) => {
+                      isResultSummaryComposingRef.current = false;
+                      setResult((prev) => (prev ? { ...prev, summary: e.currentTarget.value } : prev));
+                    }}
+                    className="w-full text-xs font-marathi text-gray-800 border border-gray-300 rounded-lg p-2"
                   />
                 </div>
               </div>
@@ -496,7 +539,14 @@ export default function AIStudioClient({ categories }: AIStudioClientProps) {
                   rows={8}
                   value={result.body_markdown}
                   onChange={(e) => setResult({ ...result, body_markdown: e.target.value })}
-                  className="w-full font-mono text-xs border border-gray-300 rounded-lg p-3 leading-relaxed"
+                  onCompositionStart={() => {
+                    isResultBodyComposingRef.current = true;
+                  }}
+                  onCompositionEnd={(e) => {
+                    isResultBodyComposingRef.current = false;
+                    setResult((prev) => (prev ? { ...prev, body_markdown: e.currentTarget.value } : prev));
+                  }}
+                  className="w-full font-marathi text-xs border border-gray-300 rounded-lg p-3 leading-relaxed"
                 />
               </div>
 
