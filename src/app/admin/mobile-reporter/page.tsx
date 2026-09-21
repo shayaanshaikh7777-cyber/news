@@ -37,16 +37,20 @@ export default function MobileReporterPage() {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showManualUrl, setShowManualUrl] = useState(false);
 
-  // IME Composition state refs for Marathi / Gboard input safety
-  const isHeadlineComposingRef = useRef<boolean>(false);
-  const isNotesComposingRef = useRef<boolean>(false);
+  // DOM refs — used so React never controls these inputs via value=
+  // This is required on Android Chrome + Gboard: any React render that sets
+  // element.value terminates the active InputConnection and breaks IME composition.
+  const headlineInputRef = useRef<HTMLInputElement | null>(null);
+  const notesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastCreatedArticleIdRef = useRef<string | null>(null);
 
   // AI cleanup and auto-drafting
   const handleAICleanup = async () => {
-    if (!notes.trim()) {
+    // Read from DOM ref — uncontrolled textarea, ref is definitive current value
+    const currentNotes = notesTextareaRef.current?.value ?? notes;
+    if (!currentNotes.trim()) {
       alert("कृपया आधी कच्च्या नोंदी टाईप करा किंवा बातमीचा मजकूर भरा.");
       return;
     }
@@ -60,7 +64,7 @@ export default function MobileReporterPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          notes,
+          notes: currentNotes,
           location,
           language: "marathi",
           action: "GENERATE_ARTICLE",
@@ -69,8 +73,17 @@ export default function MobileReporterPage() {
 
       const json = await res.json();
       if (res.ok && json.data) {
+        // Update React state (used for validation + submission)
         setHeadline(json.data.headline);
         setNotes(json.data.body_markdown);
+        // Imperatively update the uncontrolled DOM elements so the AI content
+        // is visible in the textarea (value= prop is absent — React won't do this)
+        if (headlineInputRef.current) {
+          headlineInputRef.current.value = json.data.headline;
+        }
+        if (notesTextareaRef.current) {
+          notesTextareaRef.current.value = json.data.body_markdown;
+        }
         setMessage("✅ AI द्वारे बातमीचा मसुदा तयार झाला आहे!");
       } else {
         setErrorMessage(json.error || "AI मसुदा तयार करताना त्रुटी आली.");
@@ -129,7 +142,11 @@ export default function MobileReporterPage() {
 
   // Submit report handler (handles both Editor Submission and Direct Publish)
   const submitReport = async (directPublish: boolean) => {
-    if (!headline.trim() || !notes.trim()) {
+    // Read from DOM refs — definitive source of truth for uncontrolled inputs
+    const currentHeadline = (headlineInputRef.current?.value ?? headline).trim();
+    const currentNotes = (notesTextareaRef.current?.value ?? notes).trim();
+
+    if (!currentHeadline || !currentNotes) {
       alert("कृपया बातमीचे शीर्षक आणि मजकूर दोन्ही भरा.");
       return;
     }
@@ -141,8 +158,8 @@ export default function MobileReporterPage() {
     try {
       const res = await createMobileReportAction({
         articleId: lastCreatedArticleIdRef.current || undefined,
-        headline: headline.trim(),
-        notes: notes.trim(),
+        headline: currentHeadline,
+        notes: currentNotes,
         photoUrl: photoUrl.trim() || undefined,
         youtubeUrl: youtubeUrl.trim() || undefined,
         locationName: location,
@@ -181,7 +198,9 @@ export default function MobileReporterPage() {
   };
 
   const handleDirectPublishClick = () => {
-    if (!headline.trim() || !notes.trim()) {
+    const currentHeadline = (headlineInputRef.current?.value ?? headline).trim();
+    const currentNotes = (notesTextareaRef.current?.value ?? notes).trim();
+    if (!currentHeadline || !currentNotes) {
       alert("कृपया बातमीचे शीर्षक आणि मजकूर दोन्ही भरा.");
       return;
     }
@@ -227,29 +246,27 @@ export default function MobileReporterPage() {
         onSubmit={handleSubmitToEditor}
         className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4 text-xs sm:text-sm"
       >
-        {/* Headline */}
+        {/* Headline
+            UNCONTROLLED INPUT — no value= prop.
+            React MUST NOT write element.value during renders or Gboard's
+            InputConnection is terminated and Marathi composition breaks.
+            defaultValue sets the initial DOM value once at mount only. */}
         <div>
           <label className="block font-bold text-gray-800 mb-1">
             बातमीचे शीर्षक (Headline): <span className="text-red-600">*</span>
           </label>
           <input
+            ref={headlineInputRef}
             type="text"
             required
-            value={headline}
-            onCompositionStart={() => {
-              isHeadlineComposingRef.current = true;
-            }}
-            onCompositionEnd={(e) => {
-              isHeadlineComposingRef.current = false;
-              setHeadline(e.currentTarget.value);
-            }}
+            defaultValue=""
             onChange={(e) => setHeadline(e.target.value)}
             placeholder="उदा. खर्डा येथे अचानक वीज पुरवठा खंडित, व्यापारी आक्रमक"
             className="w-full border border-gray-300 rounded-lg p-2.5 font-bold font-marathi text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none"
           />
         </div>
 
-        {/* Location Selector */}
+        {/* Location Selector — controlled select is fine; <select> has no IME */}
         <div>
           <label className="block font-bold text-gray-800 mb-1 flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5 text-red-700" />
@@ -276,22 +293,18 @@ export default function MobileReporterPage() {
           </select>
         </div>
 
-        {/* Notes / Body */}
+        {/* Notes / Body
+            UNCONTROLLED TEXTAREA — no value= prop.
+            Same rationale as headline above. */}
         <div>
           <label className="block font-bold text-gray-800 mb-1">
             कच्च्या नोंदी किंवा बातमीचा मसुदा: <span className="text-red-600">*</span>
           </label>
           <textarea
+            ref={notesTextareaRef}
             rows={6}
             required
-            value={notes}
-            onCompositionStart={() => {
-              isNotesComposingRef.current = true;
-            }}
-            onCompositionEnd={(e) => {
-              isNotesComposingRef.current = false;
-              setNotes(e.currentTarget.value);
-            }}
+            defaultValue=""
             onChange={(e) => setNotes(e.target.value)}
             placeholder="घटनेचा तपशील, प्रत्यक्षदर्शींची नावे, वेळ आणि महत्त्वाचे मुद्दे..."
             className="w-full border border-gray-300 rounded-lg p-2.5 text-xs font-marathi text-gray-900 focus:ring-2 focus:ring-red-700 focus:outline-none leading-relaxed"
