@@ -20,6 +20,10 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  input, textarea, select, button {
+    font-family: var(--font-noto-sans-marathi), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
 }
 
 /* Editorial Newspaper Typography */
