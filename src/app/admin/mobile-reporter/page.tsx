@@ -90,12 +90,13 @@ export default function MobileReporterPage() {
   const [showManualUrl, setShowManualUrl] = useState(false);
 
   // Recognition session & lifecycle controller refs
-  const sessionIdRef = useRef<number>(0);
   const recognitionRef = useRef<ISpeechRecognitionInstance | null>(null);
-  const isRecognitionRunningRef = useRef<boolean>(false);
-  const shouldKeepListeningRef = useRef<boolean>(false);
-  const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isRecognitionActiveRef = useRef<boolean>(false);
+  const userIntentListeningRef = useRef<boolean>(false);
   const processedIndicesRef = useRef<Set<number>>(new Set());
+  const recoveryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const consecutiveRecoveriesRef = useRef<number>(0);
+  const lastRecoveryTimeRef = useRef<number>(0);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastCreatedArticleIdRef = useRef<string | null>(null);
@@ -108,12 +109,12 @@ export default function MobileReporterPage() {
     }
 
     return () => {
-      // Cleanup any active speech session on unmount
-      shouldKeepListeningRef.current = false;
-      sessionIdRef.current += 1;
-      if (restartTimeoutRef.current) {
-        clearTimeout(restartTimeoutRef.current);
-        restartTimeoutRef.current = null;
+      // Cleanup on unmount
+      userIntentListeningRef.current = false;
+      isRecognitionActiveRef.current = false;
+      if (recoveryTimeoutRef.current) {
+        clearTimeout(recoveryTimeoutRef.current);
+        recoveryTimeoutRef.current = null;
       }
       if (recognitionRef.current) {
         try {
@@ -126,18 +127,39 @@ export default function MobileReporterPage() {
     };
   }, []);
 
-  // Creates and starts a new recognition session with generation/session token guard
-  const startNewRecognitionSession = () => {
-    const SR = getSpeechRecognitionConstructor();
-    if (!SR) return;
+  // Stops active recognition cleanly when user manually turns MIC OFF
+  const stopListeningManual = () => {
+    userIntentListeningRef.current = false;
+    isRecognitionActiveRef.current = false;
 
-    // Invalidate any previous session so late callbacks are discarded
-    const sessionId = ++sessionIdRef.current;
+    if (recoveryTimeoutRef.current) {
+      clearTimeout(recoveryTimeoutRef.current);
+      recoveryTimeoutRef.current = null;
+    }
+    consecutiveRecoveriesRef.current = 0;
 
-    // Reset this session's processed index guard
+    if (recognitionRef.current) {
+      const rec = recognitionRef.current;
+      recognitionRef.current = null;
+      try {
+        rec.stop();
+      } catch {
+        try {
+          rec.abort();
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     processedIndicesRef.current.clear();
+    setIsMicOn(false);
+    setVoiceStatus("व्हॉइस इनपुट थांबवले");
+  };
 
-    // Abort prior instance cleanly if one exists
+  // Starts ONE continuous SpeechRecognition session
+  const startListeningSession = (SR: SpeechRecognitionConstructor) => {
+    // Ensure no overlapping instances
     if (recognitionRef.current) {
       try {
         recognitionRef.current.abort();
@@ -146,7 +168,7 @@ export default function MobileReporterPage() {
       }
       recognitionRef.current = null;
     }
-    isRecognitionRunningRef.current = false;
+    isRecognitionActiveRef.current = false;
 
     try {
       const recognition = new SR();
@@ -155,17 +177,25 @@ export default function MobileReporterPage() {
       recognition.interimResults = false;
 
       recognition.onstart = () => {
-        if (sessionId !== sessionIdRef.current) return;
-        isRecognitionRunningRef.current = true;
-        if (shouldKeepListeningRef.current) {
-          setIsMicOn(true);
-          setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला (थांबवण्यासाठी माईक बटण दाबा)");
+        if (!userIntentListeningRef.current) {
+          try {
+            recognition.abort();
+          } catch {
+            // ignore
+          }
+          recognitionRef.current = null;
+          isRecognitionActiveRef.current = false;
+          setIsMicOn(false);
+          return;
         }
+        isRecognitionActiveRef.current = true;
+        consecutiveRecoveriesRef.current = 0;
+        setIsMicOn(true);
+        setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला (थांबवण्यासाठी माईक दाबा)");
       };
 
       recognition.onresult = (event: ISpeechRecognitionEvent) => {
-        if (sessionId !== sessionIdRef.current) return;
-        if (!shouldKeepListeningRef.current) return;
+        if (!userIntentListeningRef.current) return;
 
         // Process only newly received result indices
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -189,14 +219,13 @@ export default function MobileReporterPage() {
       };
 
       recognition.onerror = (e: ISpeechRecognitionErrorEvent) => {
-        if (sessionId !== sessionIdRef.current) return;
-        console.warn("Speech recognition warning:", e.error);
+        console.warn("Speech recognition warning/error:", e.error);
 
-        if (!shouldKeepListeningRef.current) return;
-
+        // Natural pauses and silence MUST NOT turn the microphone OFF
         if (e.error === "no-speech") {
-          // Pause/silence detected by browser — keep Mic logically ON
-          setVoiceStatus("बोलण्याची वाट पाहत आहे... (माईक सक्रिय आहे)");
+          if (userIntentListeningRef.current) {
+            setVoiceStatus("बोलण्याची वाट पाहत आहे... (माईक चालू आहे)");
+          }
           return;
         }
 
@@ -205,78 +234,83 @@ export default function MobileReporterPage() {
         }
 
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          shouldKeepListeningRef.current = false;
-          isRecognitionRunningRef.current = false;
+          userIntentListeningRef.current = false;
+          isRecognitionActiveRef.current = false;
           setIsMicOn(false);
           setVoiceStatus("मायक्रोफोन परवानगी नाकारली गेली आहे. कृपया ब्राउझर सेटिंग्ज तपासा.");
+          recognitionRef.current = null;
           return;
         }
       };
 
       recognition.onend = () => {
-        if (sessionId !== sessionIdRef.current) return;
-        isRecognitionRunningRef.current = false;
+        isRecognitionActiveRef.current = false;
 
-        // IMPORTANT: onend does NOT commit or touch text to avoid duplicates.
-        // It only restarts recognition if the mic is logically active.
-        if (shouldKeepListeningRef.current) {
-          setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... (सक्रिय)");
-          if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
-          restartTimeoutRef.current = setTimeout(() => {
-            if (shouldKeepListeningRef.current) {
-              startNewRecognitionSession();
-            }
-          }, 150);
-        } else {
+        // Normal stop: user clicked MIC OFF
+        if (!userIntentListeningRef.current) {
+          recognitionRef.current = null;
           setIsMicOn(false);
-          setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
+          setVoiceStatus("व्हॉइस इनपुट थांबवले");
+          return;
         }
+
+        // Exceptional path: Browser terminated continuous session unexpectedly.
+        // Prevent endless restart loop and maintain UI truthfulness.
+        const now = Date.now();
+        if (now - lastRecoveryTimeRef.current < 2500) {
+          consecutiveRecoveriesRef.current += 1;
+        } else {
+          consecutiveRecoveriesRef.current = 1;
+        }
+        lastRecoveryTimeRef.current = now;
+
+        if (consecutiveRecoveriesRef.current > 3) {
+          // Browser audio disconnected repeatedly — stop and truthfully reflect in UI
+          userIntentListeningRef.current = false;
+          recognitionRef.current = null;
+          setIsMicOn(false);
+          setVoiceStatus("ब्राउझर ऑडिओ कनेक्शन समाप्त झाले. पुन्हा सुरू करण्यासाठी माईक दाबा.");
+          return;
+        }
+
+        // Clean up terminated instance before exceptional reconnect
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.abort();
+          } catch {
+            // ignore
+          }
+          recognitionRef.current = null;
+        }
+
+        processedIndicesRef.current.clear();
+        setVoiceStatus("ऑडिओ कनेक्शन रीफ्रेश होत आहे...");
+
+        if (recoveryTimeoutRef.current) clearTimeout(recoveryTimeoutRef.current);
+        recoveryTimeoutRef.current = setTimeout(() => {
+          if (userIntentListeningRef.current) {
+            startListeningSession(SR);
+          }
+        }, 200);
       };
 
       recognitionRef.current = recognition;
-      isRecognitionRunningRef.current = true;
       recognition.start();
     } catch (err) {
-      isRecognitionRunningRef.current = false;
+      isRecognitionActiveRef.current = false;
       console.warn("SpeechRecognition start exception:", err);
-      if (shouldKeepListeningRef.current) {
-        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
-        restartTimeoutRef.current = setTimeout(() => {
-          if (shouldKeepListeningRef.current) {
-            startNewRecognitionSession();
-          }
-        }, 300);
-      }
+      userIntentListeningRef.current = false;
+      recognitionRef.current = null;
+      setIsMicOn(false);
+      setVoiceStatus("व्हॉइस इनपुट सुरू करताना अडचण आली. कृपया पुन्हा माईक दाबा.");
     }
   };
 
   // Independent manual Mic toggle (OFF -> ON, ON -> OFF)
   const handleMicToggle = () => {
-    if (isMicOn || shouldKeepListeningRef.current) {
+    if (isMicOn || userIntentListeningRef.current) {
       // User tapped Mic to turn it OFF
-      shouldKeepListeningRef.current = false;
-      if (restartTimeoutRef.current) {
-        clearTimeout(restartTimeoutRef.current);
-        restartTimeoutRef.current = null;
-      }
-
-      // Invalidate current session so late callbacks are discarded
-      sessionIdRef.current += 1;
-
-      // Abort active recognition
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {
-          // ignore
-        }
-        recognitionRef.current = null;
-      }
-      isRecognitionRunningRef.current = false;
-
-      // Do NOT touch or re-commit notes here — text is already committed authoritatively in onresult
-      setIsMicOn(false);
-      setVoiceStatus("व्हॉइस रेकॉर्डिंग थांबवले");
+      stopListeningManual();
     } else {
       // User tapped Mic to turn it ON
       const SR = getSpeechRecognitionConstructor();
@@ -285,11 +319,12 @@ export default function MobileReporterPage() {
         return;
       }
 
-      shouldKeepListeningRef.current = true;
+      userIntentListeningRef.current = true;
+      processedIndicesRef.current.clear();
       setIsMicOn(true);
-      setVoiceStatus("🔴 रेकॉर्डिंग सुरू आहे... स्पष्ट मराठीत बोला (थांबवण्यासाठी माईक बटण दाबा)");
+      setVoiceStatus("🔴 रेकॉर्डिंग सुरू होत आहे...");
 
-      startNewRecognitionSession();
+      startListeningSession(SR);
     }
   };
 
@@ -384,8 +419,8 @@ export default function MobileReporterPage() {
     }
 
     // Stop recording if active before submitting
-    if (isMicOn || shouldKeepListeningRef.current) {
-      handleMicToggle();
+    if (isMicOn || userIntentListeningRef.current) {
+      stopListeningManual();
     }
 
     setSubmitting(true);
