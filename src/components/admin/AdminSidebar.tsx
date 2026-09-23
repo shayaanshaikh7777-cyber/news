@@ -23,6 +23,7 @@ import {
   Smartphone,
   ChevronDown,
   DollarSign,
+  Video,
 } from "lucide-react";
 import { SessionUser } from "@/lib/rbac";
 
@@ -39,6 +40,7 @@ export default function AdminSidebar({ user }: { user: SessionUser }) {
     { label: "मोबाईल रिपोर्टर (Mobile Mode)", href: "/admin/mobile-reporter", icon: Smartphone },
     { label: "ब्रेकिंग न्यूज (Breaking)", href: "/admin/breaking", icon: AlertCircle },
     { label: "वृत्तपत्र कात्रणे (Clippings)", href: "/admin/clippings", icon: Newspaper },
+    { label: "व्हिडिओ स्टुडिओ (Video Studio)", href: "/admin/video-editor", icon: Video, badge: "New" },
     { label: "मीडिया लायब्ररी (Media)", href: "/admin/media", icon: ImageIcon },
     { label: "विभाग व्यवस्थापन (Categories)", href: "/admin/categories", icon: Layers },
     { label: "गावनिहाय स्थाने (Locations)", href: "/admin/locations", icon: MapPin },
